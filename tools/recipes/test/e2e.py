@@ -31,7 +31,7 @@ def main():
         subprocess.run(['bun', 'tools/recipes/src/generate.ts', 'recipes/suite.ts', str(plan_path)], cwd=ROOT, check=True, timeout=60)
         original = json.loads(plan_path.read_text())
         success = run(plan_path, directory / 'success')
-        assert len(success['cases']) == 8 and all(c['passed'] for c in success['cases'])
+        assert len(success['cases']) == 9 and all(c['passed'] for c in success['cases'])
         # Fail inside a named flow, then verify a clean later case still passes.
         changed = json.loads(plan_path.read_text())
         case = changed['cases'][0]

@@ -4,6 +4,7 @@ export interface VaultFixture {
   selected: string;
   filter: string;
   opaque: boolean;
+  native_titlebar?: boolean;
 }
 /** New object on every call; no live SDK, user account, preferences or credentials. */
 export function demoVault(overrides: Partial<VaultFixture> = {}): VaultFixture {

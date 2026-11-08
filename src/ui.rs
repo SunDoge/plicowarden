@@ -118,6 +118,13 @@ impl Warden {
             shader(ui, &AMBIENCE).absolute(0., 0.).radius(0.).width_percent(100.).height_percent(100.);
             if self.login_open {
                 self.account(ui);
+                if self.native_titlebar {
+                    let inset = (88. / self.zoom.factor()) as f32;
+                    let width = (ui.viewport_width() - inset).max(1.);
+                    row(ui).absolute(inset, 0.).width(width).height((28. / self.zoom.factor()) as f32) + |ui| {
+                        self.window_drag_region(ui, false);
+                    };
+                }
                 return;
             }
             row(ui).width_percent(100.).height_percent(100.).padding(12).gap(18) + |ui| {
@@ -129,11 +136,15 @@ impl Warden {
                         .radius(18.).corner_smoothing(1.).elevation(Elevation::FLOATING)
                         .material(self.appearance.material()).padding_x(12).align(Align::Center).gap(12) + |ui|
                     {
+                        if self.native_titlebar
+                            && !(self.sidebar && ui.viewport_width() >= 980.)
+                        {
+                            column(ui).width((88. / self.zoom.factor()) as f32).shrink(0.).end();
+                        }
                         if tool(ui, "sidebar", "Toggle sidebar", false) {
                             self.sidebar = !self.sidebar;
                         }
-                        text(ui, "Plicowarden").weight(700).color(INK);
-                        column(ui).grow(1.).end();
+                        self.window_drag_region(ui, true);
                         if button(ui).text("Settings").ghost().background_alpha(0.)
                             .disabled(self.busy || self.editor.is_some()).clicked()
                         {
@@ -202,14 +213,39 @@ impl Warden {
     }
     #[component]
     #[rustfmt::skip]
+    fn window_drag_region(&mut self, ui: &mut UiContext, title: bool) {
+        if !self.native_titlebar {
+            text(ui, "Plicowarden").weight(700).color(INK);
+            column(ui).grow(1.).end();
+            return;
+        }
+        button_base(ui, "Move window").width(0.).grow(1.).min_width(32.).height_percent(100.).background_alpha(0.)
+            .border(0., EDGE).justify(Justify::Start).align(Align::Center).padding(0).children(|ui| {
+            let pressed = ui.pressed();
+            if pressed && !self.titlebar_pressed {
+                self.commands.push(HostCommand::Window(plico_renderer::WindowCommand::StartDragging));
+            }
+            self.titlebar_pressed = pressed;
+            if title {
+                text(ui, "Plicowarden").weight(700).color(INK);
+            }
+        });
+    }
+    #[component]
+    #[rustfmt::skip]
     fn sidebar_ui(&mut self, ui: &mut UiContext) {
         column(ui).position(plico::Position::Relative).width(224.).shrink(0.).height_percent(100.).padding(12).gap(4)
             .radius(22.).corner_smoothing(1.).elevation(Elevation::OVERLAY).material(self.appearance.material())
         + |ui|
         {
-            row(ui).width_percent(100.).height(44.).shrink(0.).align(Align::Center).gap(10).padding_x(10) + |ui| {
-                glyph(ui, "shield", 25., Color::Literal(0x68618d));
-                text(ui, "My workspace").weight(650);
+            row(ui).width_percent(100.)
+                .height(if self.native_titlebar { 44_f32.max((32. / self.zoom.factor()) as f32) } else { 44. })
+                .shrink(0.).align(Align::Center).gap(10).padding_x(10) + |ui|
+            {
+                if !self.native_titlebar {
+                    glyph(ui, "shield", 25., Color::Literal(0x68618d));
+                    text(ui, "My workspace").weight(650);
+                }
             };
             column(ui).width_percent(100.).height(0.).grow(1.).scroll_y(true).gap(4) + |ui| {
                 section(ui, "Items");

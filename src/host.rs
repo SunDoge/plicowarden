@@ -13,6 +13,7 @@ use std::{
 
 pub struct Host {
     pub app: Warden,
+    window_actions: std::collections::VecDeque<plico_renderer::HostAction>,
     client: Option<Client>,
     wake: Wake,
     settings_path: Option<PathBuf>,
@@ -24,6 +25,7 @@ impl Host {
         let (settings_tx, settings_rx) = mpsc::channel();
         let mut host = Self {
             app,
+            window_actions: Default::default(),
             client: None,
             wake: Arc::new(|| {}),
             settings_path: Appearance::path(),
@@ -49,6 +51,9 @@ impl Host {
     fn flush(&mut self) {
         for command in std::mem::take(&mut self.app.commands) {
             match command {
+                HostCommand::Window(command) => self
+                    .window_actions
+                    .push_back(plico_renderer::HostAction::Window(command)),
                 HostCommand::SshDecision { id, allow } => {
                     if let Some(client) = &self.client
                         && let Err(error) =
@@ -90,6 +95,9 @@ impl Host {
     }
 }
 impl HostView for Host {
+    fn take_host_action(&mut self) -> Option<plico_renderer::HostAction> {
+        self.window_actions.pop_front()
+    }
     fn show(&mut self, ui: &mut plico::UiContext<'_>) {
         App::show(&mut self.app, ui);
         self.flush();

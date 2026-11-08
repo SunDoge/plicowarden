@@ -5,7 +5,7 @@ import warden from "../../../recipes/suite.ts";
 
 test("real Warden imports and matrix expand into independent versioned recipes", () => {
   validate(warden);
-  assert.equal(warden.cases.length, 8);
+  assert.equal(warden.cases.length, 9);
   assert.deepEqual(warden.cases.slice(0, 2).map(c => [c.name, c.viewport.width]), [["search-desktop", 1440], ["search-compact", 820]]);
   assert.equal(warden.cases[0].steps.filter(s => s.operation.op === "capture").length, 4);
   const step = warden.cases[0].steps.find(s => s.flow.includes("search-vault"))!;

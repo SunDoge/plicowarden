@@ -84,3 +84,52 @@ fn saving_appearance_runs_in_host_and_reopens_the_saved_projection() {
             .liquid_glass
     );
 }
+
+#[test]
+fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
+    use plico_renderer::{
+        HostAction, Modifiers, Point, PointerButton, PointerEvent, PointerPhase, UiEvent,
+        WindowCommand,
+    };
+    let mut app = Warden::default();
+    app.native_titlebar = true;
+    let mut ui = Driver::new(Host::new(app, false), 1440, 1000).unwrap();
+    click(&mut ui, "Settings");
+    assert!(ui.source.view.app.settings_open);
+    assert!(ui.source.take_host_action().is_none());
+    let bounds = ui
+        .snapshot()
+        .exposed_nodes()
+        .into_iter()
+        .find(|n| n.label.as_deref() == Some("Move window"))
+        .unwrap()
+        .bounds;
+    let position = Point {
+        x: f64::from((bounds[0] + bounds[2]) / 2.),
+        y: f64::from((bounds[1] + bounds[3]) / 2.),
+    };
+    for phase in [PointerPhase::Down, PointerPhase::Up, PointerPhase::Down] {
+        ui.source.handle_event(UiEvent::Pointer(PointerEvent {
+            phase,
+            position,
+            button: Some(PointerButton::Primary),
+            buttons: if phase == PointerPhase::Down { 1 } else { 0 },
+            modifiers: Modifiers::empty(),
+            properties: Default::default(),
+        }));
+        ui.execute(Command::Snapshot).unwrap();
+        if phase == PointerPhase::Down {
+            assert!(matches!(
+                ui.source.take_host_action(),
+                Some(HostAction::Window(WindowCommand::StartDragging))
+            ));
+        } else {
+            assert!(ui.source.take_host_action().is_none());
+        }
+        ui.execute(Command::Snapshot).unwrap();
+        assert!(
+            ui.source.take_host_action().is_none(),
+            "drag command repeated while held"
+        );
+    }
+}

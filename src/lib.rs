@@ -55,12 +55,14 @@ pub struct PreviewConfig {
     pub filter: Option<String>,
     pub selected: Option<String>,
     pub opaque: bool,
+    pub native_titlebar: bool,
 }
 impl PreviewConfig {
     pub fn app(&self) -> Warden {
         let mut app = Warden::default();
         // Reference fixtures intentionally use 100% density on every platform.
         app.zoom.set(1.);
+        app.native_titlebar = self.native_titlebar;
         app.query = self.query.clone();
         if let Some(filter) = &self.filter {
             app.filter = filter.clone();

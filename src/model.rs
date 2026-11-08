@@ -160,6 +160,7 @@ pub fn demo_items() -> Vec<Item> {
     .collect()
 }
 pub enum HostCommand {
+    Window(plico_renderer::WindowCommand),
     SshDecision { id: u64, allow: bool },
     Account { ticket: u64, request: Box<Request> },
     Disconnect,
@@ -291,6 +292,8 @@ pub struct Warden {
     pub selected: String,
     pub ascending: bool,
     pub sidebar: bool,
+    pub native_titlebar: bool,
+    pub titlebar_pressed: bool,
     pub reveal: bool,
     pub settings_open: bool,
     pub login_open: bool,
@@ -350,6 +353,8 @@ impl Default for Warden {
             selected: "github".into(),
             ascending: true,
             sidebar: true,
+            native_titlebar: cfg!(target_os = "macos"),
+            titlebar_pressed: false,
             reveal: false,
             settings_open: false,
             login_open: false,

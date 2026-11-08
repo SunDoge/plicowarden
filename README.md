@@ -26,7 +26,7 @@ This is an independent GPL-3.0-only Cargo workspace. Plico stays Apache-2.0;
 it does not depend on Plicowarden or the Bitwarden SDK. The `sdk/` package is
 `plicowarden-sdk`; the application package/binary is `plicowarden`.
 
-Plico dependencies are pinned to Git commit `87de4907d414d0f3190aa4d31c99efbc640f6b18`
+Plico dependencies are pinned to Git commit `cdd910140913ada0cf078216f3b38be71d5292f3`
 from `https://github.com/SunDoge/plico.git`. Cargo fetches the framework;
 a sibling Plico checkout is not required. `Cargo.lock` records the same source.
 No original Warden, Warden Desktop, Wabou or .NET checkout is needed.
@@ -69,11 +69,36 @@ so small dimmed controls do not each allocate a full Retina window texture;
 the 128 MiB frame budget remains in place.
 
 Reference JSON/TS preview fixtures remain at 100% density on every platform.
+On macOS the glass toolbar extends into a transparent native titlebar while
+retaining native window controls. Drag the title area to move the window;
+toolbar buttons remain independent. Collapsed-sidebar and login layouts reserve
+space for the native controls. Headless previews reserve that space but do not
+draw AppKit controls; other platforms retain their native titlebar.
+
 For synthetic 85% captures at both 1× and Retina 2× backing density:
 
 ```sh
 cargo run --locked --example display_probe -- --output reports/display
 ```
+
+## Memory regression probe
+
+The pinned renderer fixes a backdrop-output retention bug that allocated more
+textures on every scrolling frame. Preflight reservation is now separate from
+actual draw ownership. Old scene/image resources are released on removal;
+coverage masks use one-channel GPU textures without changing coverage pixels.
+
+Run synthetic stress without opening accounts or a window:
+
+```sh
+cargo run --locked --example memory_probe -- --frames 600 --scroll
+cargo run --locked --example memory_probe -- --frames 60
+```
+
+JSON lines report RSS (from `ps`), output targets, effect/image cache bytes and
+CPU raster cache bytes. This offscreen test includes CPU readback storage and
+platform driver overhead; RSS is not interchangeable with macOS Activity Monitor
+footprint. Cache trimming need not immediately return allocator/driver pages.
 
 ## Development and architecture
 
@@ -133,7 +158,7 @@ plico fmt --check src tests sdk/src
 To install the matching formatter CLI when needed:
 
 ```sh
-cargo install --git https://github.com/SunDoge/plico.git --rev 87de4907d414d0f3190aa4d31c99efbc640f6b18 --locked plico-cli
+cargo install --git https://github.com/SunDoge/plico.git --rev cdd910140913ada0cf078216f3b38be71d5292f3 --locked plico-cli
 ```
 
 Tests drive real declarations, layout and native input through the deterministic
@@ -214,6 +239,6 @@ surfaces retain a translucent white fill. Shadows are separate from refraction.
 cargo test --locked -p plico-desktop --no-default-features --features wgpu --test materials -- --ignored
 ```
 
-Run this framework-only command in a Plico checkout at `87de4907d414d0f3190aa4d31c99efbc640f6b18`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
+Run this framework-only command in a Plico checkout at `cdd910140913ada0cf078216f3b38be71d5292f3`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
 checks that the curved edge changes while the flat center does not, verifies two
 shadow layers reach the renderer, and checks repeat captures remain identical.

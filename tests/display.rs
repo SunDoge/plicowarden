@@ -91,6 +91,8 @@ fn compact_controls_keep_logical_size_and_hit_targets_at_retina_density() {
 fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     assert_eq!(display::default_scale(true), 0.85);
     assert_eq!(display::default_scale(false), 1.);
+    assert!(display::window_options(true).titlebar_overlay);
+    assert!(!display::window_options(false).titlebar_overlay);
     assert_eq!(
         display::window_options(true).initial_inner_size,
         (1224, 850)
@@ -107,4 +109,36 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     }
     .validated();
     assert_eq!(invalid.ui_scale, Appearance::default().ui_scale);
+}
+
+#[test]
+fn titlebar_controls_clear_the_native_traffic_light_area_at_different_zoom_levels() {
+    use plico_renderer::SemanticRole;
+    for (width, height, factor, sidebar) in [
+        (1224, 850, 0.85, true),
+        (820, 640, 1., false),
+        (1224, 850, 0.5, false),
+        (1224, 850, 1.5, false),
+    ] {
+        let mut app = Warden::default();
+        app.native_titlebar = true;
+        app.sidebar = sidebar;
+        app.zoom.set(factor);
+        let zoom = app.zoom.clone();
+        let mut source = ZoomSource::with_controller(Box::new(Source::new(NativeApp(app))), zoom);
+        source.set_semantics_enabled(true);
+        source.set_device_scale(2.);
+        source.build_frame(&mut TextContext::new(), width, height);
+        for node in &source.semantic_snapshot().unwrap().nodes {
+            if matches!(node.role, SemanticRole::Button | SemanticRole::TextInput) && !node.disabled
+            {
+                let [x0, y0, x1, y1] = node.bounds;
+                assert!(
+                    !(x0 < 88. && x1 > 0. && y0 < 28. && y1 > 0.),
+                    "native controls overlap {:?} at {factor}",
+                    node.label
+                );
+            }
+        }
+    }
 }

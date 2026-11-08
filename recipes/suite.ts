@@ -66,4 +66,10 @@ export default suite([
     steps: [expect(button("Allow SSH signature once")).exists(), advance(200), capture("approval"),
       click(button("Deny SSH signature")), expect(button("Allow SSH signature once")).absent(), capture("denied")],
   }),
+  recipe("macos-titlebar", {
+    state: demoVault({ native_titlebar: true }),
+    steps: [expect(button("Move window")).exists(), capture("sidebar"),
+      click(button("Toggle sidebar")), expect(button("Move window")).exists(), capture("sidebar-hidden"),
+      click(button("Settings")), expect(button("Close settings")).exists()],
+  }),
 ]);
