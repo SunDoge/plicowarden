@@ -1,0 +1,18 @@
+{
+  "name": "plicowarden-dev",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.4",
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "workspaces": [
+    "tools/recipes",
+    "recipes"
+  ],
+  "scripts": {
+    "check": "bun run --bun --cwd tools/recipes check",
+    "test": "bun run --cwd tools/recipes test",
+    "recipes": "python3 scripts/run-recipes.py"
+  }
+}

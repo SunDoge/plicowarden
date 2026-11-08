@@ -1,0 +1,82 @@
+[
+  {
+    "name": "vault",
+    "scenario": "scenarios/vault.json",
+    "present": [
+      "Select GitHub",
+      "Select Linear",
+      "Show password"
+    ],
+    "absent": [
+      "Sign in",
+      "Close settings"
+    ]
+  },
+  {
+    "name": "settings",
+    "scenario": "scenarios/settings.json",
+    "present": [
+      "Liquid Glass",
+      "Reset appearance",
+      "Close settings"
+    ],
+    "absent": [
+      "Sign in"
+    ]
+  },
+  {
+    "name": "login",
+    "scenario": "scenarios/login.json",
+    "present": [
+      "Sign in",
+      "Browse demo vault"
+    ],
+    "absent": [
+      "Select GitHub"
+    ]
+  },
+  {
+    "name": "search",
+    "scenario": "scenarios/search.json",
+    "present": [
+      "Select GitHub"
+    ],
+    "absent": [
+      "Select Linear",
+      "Select Airbnb"
+    ]
+  },
+  {
+    "name": "compact",
+    "scenario": "scenarios/compact.json",
+    "present": [
+      "Select GitHub",
+      "Show password"
+    ],
+    "absent": [
+      "Favorites"
+    ]
+  },
+  {
+    "name": "editor",
+    "scenario": "scenarios/editor.json",
+    "present": [
+      "Cancel editing",
+      "Save item"
+    ],
+    "absent": [
+      "Sign in"
+    ]
+  },
+  {
+    "name": "generator",
+    "scenario": "scenarios/generator.json",
+    "present": [
+      "Generate password"
+    ],
+    "absent": [
+      "Sign in",
+      "Show password"
+    ]
+  }
+]
