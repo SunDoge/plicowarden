@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 #[serde(default, rename_all = "camelCase")]
 pub struct Appearance {
     pub liquid_glass: bool,
+    pub ui_scale: f64,
     pub animate_reflections: bool,
     pub reduce_motion: bool,
     pub frost: f64,
@@ -14,6 +15,7 @@ impl Default for Appearance {
     fn default() -> Self {
         Self {
             liquid_glass: true,
+            ui_scale: crate::display::default_scale(cfg!(target_os = "macos")),
             animate_reflections: false,
             reduce_motion: false,
             frost: 0.42,
@@ -47,7 +49,17 @@ impl Appearance {
         directories::ProjectDirs::from("", "", "Plicowarden")
             .map(|d| d.data_local_dir().join("appearance.json"))
     }
+    pub fn zoom_controller(&self) -> plico_runtime::ZoomController {
+        let controller = plico_runtime::ZoomController::default();
+        controller.set(self.clone().validated().ui_scale);
+        controller
+    }
     pub fn validated(mut self) -> Self {
+        self.ui_scale = if self.ui_scale.is_finite() {
+            self.ui_scale.clamp(0.5, 3.)
+        } else {
+            Self::default().ui_scale
+        };
         self.frost = if self.frost.is_finite() {
             self.frost.clamp(0., 1.)
         } else {

@@ -48,12 +48,14 @@ fn main() -> Result<(), Error> {
             .context(CaptureSnafu)?;
         return Ok(());
     }
-    plico_desktop::run_host_view_with_options(
-        Host::new(Warden::default(), true),
-        plico_desktop::WindowOptions::new()
-            .title("Plicowarden")
-            .initial_inner_size(1440, 1000)
-            .min_inner_size(820, 640),
+    let host = Host::new(Warden::default(), true);
+    let zoom = host.app.zoom.clone();
+    plico_desktop::run_source_with_options(
+        plico_runtime::ZoomSource::with_controller(
+            Box::new(plico_runtime::Source::new(host)),
+            zoom,
+        ),
+        plicowarden::display::window_options(cfg!(target_os = "macos")),
     )
     .context(DesktopSnafu)
 }

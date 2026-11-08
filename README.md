@@ -26,7 +26,7 @@ This is an independent GPL-3.0-only Cargo workspace. Plico stays Apache-2.0;
 it does not depend on Plicowarden or the Bitwarden SDK. The `sdk/` package is
 `plicowarden-sdk`; the application package/binary is `plicowarden`.
 
-Plico dependencies are pinned to Git commit `4465f156626539076da8d068956198a81a02aa23`
+Plico dependencies are pinned to Git commit `87de4907d414d0f3190aa4d31c99efbc640f6b18`
 from `https://github.com/SunDoge/plico.git`. Cargo fetches the framework;
 a sibling Plico checkout is not required. `Cargo.lock` records the same source.
 No original Warden, Warden Desktop, Wabou or .NET checkout is needed.
@@ -55,6 +55,25 @@ mode is 0600. Existing socket paths are never overwritten. Optional
 `PLICOWARDEN_SSH_AUTH_SOCK` must be an absolute path inside such a private directory.
 Windows pipes, FIDO/security-key operations, destination-constrained forwarding,
 platform packaging and real-account SSH integration are not validated here.
+
+## Interface size
+
+Native macOS windows start at 1224×850 logical points and 85% interface scale;
+other platforms keep 1440×1000 and 100%. Retina backing density remains managed
+by the OS. Settings → Appearance → Interface scale changes the whole interface,
+including pointer, accessibility and IME geometry through Plico's ZoomSource.
+Use Cmd +/−/0 on macOS (Ctrl elsewhere); 0 means 100%. Save appearance to persist
+the current scale. Old appearance files receive the platform's default scale.
+The pinned renderer also crops oversized opacity targets to their actual ink,
+so small dimmed controls do not each allocate a full Retina window texture;
+the 128 MiB frame budget remains in place.
+
+Reference JSON/TS preview fixtures remain at 100% density on every platform.
+For synthetic 85% captures at both 1× and Retina 2× backing density:
+
+```sh
+cargo run --locked --example display_probe -- --output reports/display
+```
 
 ## Development and architecture
 
@@ -114,7 +133,7 @@ plico fmt --check src tests sdk/src
 To install the matching formatter CLI when needed:
 
 ```sh
-cargo install --git https://github.com/SunDoge/plico.git --rev 4465f156626539076da8d068956198a81a02aa23 --locked plico-cli
+cargo install --git https://github.com/SunDoge/plico.git --rev 87de4907d414d0f3190aa4d31c99efbc640f6b18 --locked plico-cli
 ```
 
 Tests drive real declarations, layout and native input through the deterministic
@@ -195,6 +214,6 @@ surfaces retain a translucent white fill. Shadows are separate from refraction.
 cargo test --locked -p plico-desktop --no-default-features --features wgpu --test materials -- --ignored
 ```
 
-Run this framework-only command in a Plico checkout at `4465f156626539076da8d068956198a81a02aa23`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
+Run this framework-only command in a Plico checkout at `87de4907d414d0f3190aa4d31c99efbc640f6b18`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
 checks that the curved edge changes while the flat center does not, verifies two
 shadow layers reach the renderer, and checks repeat captures remain identical.

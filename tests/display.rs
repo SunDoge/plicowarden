@@ -1,0 +1,110 @@
+use plico_renderer::{
+    FrameSource, Modifiers, Point, PointerButton, PointerEvent, PointerPhase, TextContext, UiEvent,
+};
+use plico_runtime::{NativeApp, Source, ZoomSource};
+use plicowarden::{Warden, appearance::Appearance, display};
+
+fn source(factor: f64) -> ZoomSource {
+    let app = Warden::default();
+    app.zoom.set(factor);
+    let zoom = app.zoom.clone();
+    let mut source = ZoomSource::with_controller(Box::new(Source::new(NativeApp(app))), zoom);
+    source.set_semantics_enabled(true);
+    source
+}
+fn bounds(source: &ZoomSource, label: &str) -> [f32; 4] {
+    source
+        .semantic_snapshot()
+        .unwrap()
+        .nodes
+        .iter()
+        .find(|n| n.label.as_deref() == Some(label))
+        .unwrap()
+        .bounds
+}
+fn click(source: &mut ZoomSource, text: &mut TextContext, label: &str) {
+    let b = bounds(source, label);
+    for phase in [PointerPhase::Down, PointerPhase::Up] {
+        source.prepare_for_event(text);
+        source.handle_event(UiEvent::Pointer(PointerEvent {
+            phase,
+            position: Point {
+                x: f64::from((b[0] + b[2]) / 2.),
+                y: f64::from((b[1] + b[3]) / 2.),
+            },
+            button: Some(PointerButton::Primary),
+            buttons: if phase == PointerPhase::Down { 1 } else { 0 },
+            modifiers: Modifiers::empty(),
+            properties: Default::default(),
+        }));
+    }
+    source.build_frame(text, 1224, 850);
+}
+
+#[test]
+fn compact_controls_keep_logical_size_and_hit_targets_at_retina_density() {
+    let mut baseline = source(1.);
+    let mut text = TextContext::new();
+    baseline.set_device_scale(1.);
+    baseline.build_frame(&mut text, 1224, 850);
+    let full = bounds(&baseline, "Select GitHub");
+    let mut previous = None;
+    for backing_scale in [1., 2.] {
+        let mut compact = source(0.85);
+        let mut text = TextContext::new();
+        compact.set_device_scale(backing_scale);
+        compact.build_frame(&mut text, 1224, 850);
+        let row = bounds(&compact, "Select GitHub");
+        assert!(((row[3] - row[1]) / (full[3] - full[1]) - 0.85).abs() < 0.02);
+        if let Some(previous) = previous {
+            assert_eq!(row, previous);
+        }
+        previous = Some(row);
+        click(&mut compact, &mut text, "Search all vaults");
+        compact.handle_event(UiEvent::TextInput("github".into()));
+        compact.build_frame(&mut text, 1224, 850);
+        let tree = compact.semantic_snapshot().unwrap();
+        assert!(
+            tree.nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some("Select GitHub"))
+        );
+        assert!(
+            !tree
+                .nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some("Select Linear"))
+        );
+        click(&mut compact, &mut text, "Settings");
+        assert!(
+            compact
+                .semantic_snapshot()
+                .unwrap()
+                .nodes
+                .iter()
+                .any(|n| n.label.as_deref() == Some("Close settings"))
+        );
+    }
+}
+
+#[test]
+fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
+    assert_eq!(display::default_scale(true), 0.85);
+    assert_eq!(display::default_scale(false), 1.);
+    assert_eq!(
+        display::window_options(true).initial_inner_size,
+        (1224, 850)
+    );
+    assert_eq!(
+        display::window_options(false).initial_inner_size,
+        (1440, 1000)
+    );
+    let legacy: Appearance = serde_json::from_str(r#"{"liquidGlass":false,"frost":0.42}"#).unwrap();
+    assert_eq!(legacy.ui_scale, Appearance::default().ui_scale);
+    let invalid = Appearance {
+        ui_scale: f64::NAN,
+        ..Default::default()
+    }
+    .validated();
+    assert_eq!(invalid.ui_scale, Appearance::default().ui_scale);
+}

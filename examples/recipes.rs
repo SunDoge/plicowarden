@@ -3,10 +3,10 @@ use plico_desktop::{
     NativeApp, PreviewSession, RenderBackend,
     recipe::{RecipeError, RecipeMode, RecipePlan},
 };
+use plicowarden::{PreviewConfig, Warden, model::HostCommand};
 use serde::Deserialize;
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
-use plicowarden::{PreviewConfig, Warden, model::HostCommand};
 
 #[derive(usage_rs::Cli)]
 #[usage(about = "Execute TS-generated Warden recipes (synthetic fixtures only)")]

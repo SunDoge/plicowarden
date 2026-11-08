@@ -1,6 +1,7 @@
 //! GPL-3.0-only Rust frontend of Warden, aligned with the independent C# app.
 pub mod appearance;
 mod detail;
+pub mod display;
 mod forms;
 pub mod generator;
 pub mod host;
@@ -11,6 +12,7 @@ pub use model::Warden;
 
 impl plico_dev::App for Warden {
     fn show(&mut self, ui: &mut plico::UiContext<'_>) {
+        self.appearance.ui_scale = self.zoom.factor();
         self.show_ui(ui);
     }
     fn theme(&self) -> plico::Theme {
@@ -57,6 +59,8 @@ pub struct PreviewConfig {
 impl PreviewConfig {
     pub fn app(&self) -> Warden {
         let mut app = Warden::default();
+        // Reference fixtures intentionally use 100% density on every platform.
+        app.zoom.set(1.);
         app.query = self.query.clone();
         if let Some(filter) = &self.filter {
             app.filter = filter.clone();

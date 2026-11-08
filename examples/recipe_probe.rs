@@ -1,13 +1,13 @@
 //! Experimental recipe runner: one build, independent cases, optional shared GPU.
 use plico_desktop::{NativeApp, PreviewScenario, PreviewSession, RenderBackend};
 use plico_runtime::testing::Driver;
+use plicowarden::PreviewConfig;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-use plicowarden::PreviewConfig;
 
 #[derive(usage_rs::Cli)]
 #[usage(about = "Run synthetic Warden recipes without SDK or preference access")]

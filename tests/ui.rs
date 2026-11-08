@@ -191,3 +191,24 @@ fn ssh_approval_requires_an_explicit_decision_and_lock_discards_it() {
     });
     assert!(ui.source.view.0.ssh_approvals.is_empty());
 }
+
+#[test]
+fn interface_scale_setting_changes_the_host_controller_and_resets() {
+    let mut ui = Driver::new(NativeApp(Warden::default()), 1440, 1000).unwrap();
+    click(&mut ui, "Settings");
+    ui.execute(Command::SetValue {
+        label: "Interface scale".into(),
+        value: 0.85,
+    })
+    .unwrap();
+    assert!((ui.source.view.0.zoom.factor() - 0.85).abs() < 0.001);
+    click(&mut ui, "Save appearance");
+    assert!(
+        matches!(ui.source.view.0.commands.last(), Some(plicowarden::model::HostCommand::SaveAppearance(value)) if (value.ui_scale-0.85).abs()<0.001)
+    );
+    click(&mut ui, "Reset appearance");
+    assert_eq!(
+        ui.source.view.0.zoom.factor(),
+        plicowarden::appearance::Appearance::default().ui_scale
+    );
+}

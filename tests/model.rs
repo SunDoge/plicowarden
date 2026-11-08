@@ -72,6 +72,7 @@ fn appearance_is_the_only_persisted_projection_and_roundtrips() {
     let path = directory.path().join("appearance.json");
     let value = plicowarden::appearance::Appearance {
         liquid_glass: false,
+        ui_scale: 0.85,
         animate_reflections: true,
         reduce_motion: true,
         frost: 0.32,
@@ -80,6 +81,7 @@ fn appearance_is_the_only_persisted_projection_and_roundtrips() {
     value.save(&path).unwrap();
     let restored = plicowarden::appearance::Appearance::load(&path).unwrap();
     assert!(!restored.liquid_glass);
+    assert_eq!(restored.ui_scale, 0.85);
     assert!(restored.reduce_motion);
     assert_eq!(restored.frost, 0.32);
     let text = std::fs::read_to_string(&path).unwrap();

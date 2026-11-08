@@ -362,6 +362,25 @@ impl Warden {
                 }
             };
             text(ui, "Appearance").font_size(18).weight(650);
+            let before = self.appearance.ui_scale;
+            slider(ui, "Interface scale", &mut self.appearance.ui_scale, 0.5..=3.0).step(0.05).width_percent(100.);
+            text!(
+                ui,
+                "Interface scale: {:.0}%",
+                self.appearance.ui_scale * 100.
+            ).font_size(13).color(MUTED).width_percent(100.);
+            if self.appearance.ui_scale != before {
+                self.zoom.set(self.appearance.ui_scale);
+                ui.request_rebuild();
+            }
+            text(
+                ui,
+                if cfg!(target_os = "macos") {
+                    "⌘ + / − to zoom · ⌘ 0 for 100% · Save appearance to keep your scale"
+                } else {
+                    "Ctrl + / − to zoom · Ctrl 0 for 100% · Save appearance to keep your scale"
+                },
+            ).font_size(12).color(MUTED).width_percent(100.);
             text(ui,"Liquid Glass uses the scene behind each pane for blur and edge refraction. It does not require macOS desktop effects.")
                 .color(MUTED).width_percent(100.);
             switch(ui, "Liquid Glass", &mut self.appearance.liquid_glass);
@@ -384,6 +403,8 @@ impl Warden {
                 }
                 if button(ui).text("Reset appearance").ghost().background_alpha(0.).clicked() {
                     self.appearance = Default::default();
+                    self.zoom.set(self.appearance.ui_scale);
+                    ui.request_rebuild();
                     self.notice = "Defaults restored. Save to keep them.".into();
                 }
             };

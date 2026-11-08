@@ -39,6 +39,7 @@ impl Host {
                 }
             }
         }
+        host.app.zoom.set(host.app.appearance.ui_scale);
         host
     }
     pub fn with_settings_path(mut self, path: PathBuf) -> Self {
