@@ -5221,7 +5221,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plico"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5238,7 +5238,7 @@ dependencies = [
 [[package]]
 name = "plico-desktop"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "image",
  "peniko",
@@ -5257,7 +5257,7 @@ dependencies = [
 [[package]]
 name = "plico-dev"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5270,7 +5270,7 @@ dependencies = [
 [[package]]
 name = "plico-macros"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5281,7 +5281,7 @@ dependencies = [
 [[package]]
 name = "plico-motion"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "serde",
  "serde_json",
@@ -5291,7 +5291,7 @@ dependencies = [
 [[package]]
 name = "plico-native"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "cairo-rs",
  "lru",
@@ -5313,7 +5313,7 @@ dependencies = [
 [[package]]
 name = "plico-renderer"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5343,7 +5343,7 @@ dependencies = [
 [[package]]
 name = "plico-runtime"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "elsa",
  "kurbo",
@@ -5366,7 +5366,7 @@ dependencies = [
 [[package]]
 name = "plico-shell"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5402,7 +5402,7 @@ dependencies = [
 [[package]]
 name = "plico-wgpu"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
+source = "git+https://github.com/SunDoge/plico.git?rev=cfc3ec92eb54feb64b2f21077b3b7af4363b577d#cfc3ec92eb54feb64b2f21077b3b7af4363b577d"
 dependencies = [
  "bytemuck",
  "kurbo",
