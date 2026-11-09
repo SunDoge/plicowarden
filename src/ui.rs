@@ -7,7 +7,7 @@ use plico::{BoxShadow, Layout, SvgAsset};
 use plicowarden_sdk::Request;
 
 pub const INK: Color = Color::Literal(0x243443);
-pub const MUTED: Color = Color::Literal(0x526674);
+pub const MUTED: Color = Color::Muted;
 pub const EDGE: Color = Color::Literal(0xffffff);
 pub const ICON: Color = Color::Literal(0x62626c);
 static AMBIENCE: plico::ShaderAsset = plico::shader_asset!("../assets/ambience.wgsl");

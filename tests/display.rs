@@ -157,3 +157,64 @@ fn custom_titlebar_controls_keep_point_size_and_clear_content_at_different_zoom_
         }
     }
 }
+
+#[test]
+fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearance() {
+    let mut source =
+        Source::with_clock(NativeApp(Warden::default()), plico::VirtualClock::default());
+    let mut text = TextContext::new();
+    let mut scene = plico_renderer::Scene::new();
+    source
+        .render_retained_frame(&mut scene, &mut text, (1440, 1000), 1.)
+        .unwrap();
+    let subtitle = |source: &Source<NativeApp<Warden>>| {
+        source
+            .adapter
+            .placed
+            .iter()
+            .find(|node| node.paint.text.as_deref() == Some("Demo vault"))
+            .unwrap()
+            .paint
+            .text_color
+    };
+    let before = subtitle(&source);
+    assert!(
+        source
+            .handle_event(UiEvent::WindowMetrics(plico_renderer::WindowMetrics {
+                reduced_motion: true,
+                reduced_transparency: true,
+                high_contrast: true,
+                ..Default::default()
+            }))
+            .request_redraw
+    );
+    source
+        .render_retained_frame(&mut scene, &mut text, (1440, 1000), 1.)
+        .unwrap();
+    assert!(source.last_error.is_none());
+    assert_ne!(
+        subtitle(&source),
+        before,
+        "secondary text follows native contrast"
+    );
+    assert!(
+        source.view.0.appearance.liquid_glass,
+        "native fallback must not overwrite the saved glass option"
+    );
+    assert!(
+        !source.view.0.appearance.reduce_motion,
+        "native reduction must not overwrite the saved app option"
+    );
+    fn shaders(nodes: &[plico::ViewNode]) -> usize {
+        nodes
+            .iter()
+            .map(|node| usize::from(node.kind == plico::Kind::Shader) + shaders(&node.children))
+            .sum()
+    }
+    assert_eq!(
+        shaders(&source.engine.snapshot()),
+        1,
+        "only the static ambience remains; glass backdrop shaders are removed"
+    );
+    assert!(!source.has_anim());
+}
