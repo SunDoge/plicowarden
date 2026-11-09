@@ -66,7 +66,8 @@ export default suite([
   recipe("ssh-approval", {
     state: demoVault({ screen: "ssh-approval" }),
     steps: [expect(button("Allow SSH signature once")).exists(), advance(200), capture("approval"),
-      click(button("Deny SSH signature")), expect(button("Allow SSH signature once")).absent(), capture("denied")],
+      click(button("Deny SSH signature")), expect(button("Allow SSH signature once")).enabled(false),
+      advance(150), expect(button("Allow SSH signature once")).absent(), capture("denied")],
   }),
   recipe("macos-titlebar", {
     state: demoVault({ custom_titlebar: true }),

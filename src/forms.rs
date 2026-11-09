@@ -612,10 +612,11 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     pub fn confirm_ui(&mut self, ui: &mut UiContext) {
-        let Some((id, action)) = self.confirm_action.clone() else {
-            return;
-        };
+        let (id, action) = self.confirm_action.clone().unwrap_or_default();
         let mut state = std::mem::take(&mut self.confirm_modal);
+        if self.confirm_action.is_none() {
+            state.close();
+        }
         let (title, message, label) = match action.as_str() {
             "purge" => (
                 "Delete permanently?",
@@ -668,13 +669,15 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     pub fn ssh_approval_ui(&mut self, ui: &mut UiContext) {
-        let Some(approval) = self.ssh_approvals.front().cloned() else {
-            return;
-        };
+        let approval = self.ssh_approvals.front().cloned();
         let mut state = std::mem::take(&mut self.ssh_modal);
+        if approval.is_none() {
+            state.close();
+        }
         let mut decision = None;
         modal(ui, &mut state).material(self.appearance.dialog_material()).title("SSH signing request").width(560.)
             .children(|ui| {
+            let Some(approval) = approval.as_ref() else { return; };
             column(ui).gap(16).width_percent(100.) + |ui| {
                 text(ui, "Allow one SSH signature?").font_size(24).weight(700).width_percent(100.);
                 text(ui, &approval.name).font_size(18).weight(600).width_percent(100.);
@@ -698,7 +701,7 @@ impl Warden {
             decision = Some(false);
         }
         self.ssh_modal = state;
-        if let Some(allow) = decision {
+        if let (Some(allow), Some(approval)) = (decision, approval) {
             self.decide_ssh(approval.id, allow);
             ui.request_rebuild();
         }

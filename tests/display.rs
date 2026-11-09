@@ -93,6 +93,8 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     assert_eq!(display::default_scale(false), 1.);
     assert!(!display::window_options(true).decorations);
     assert!(!display::window_options(false).decorations);
+    assert_eq!(display::window_options(true).corner_radius, 16);
+    assert_eq!(display::window_options(false).corner_radius, 16);
     assert_eq!(
         display::window_options(true).initial_inner_size,
         (1224, 850)

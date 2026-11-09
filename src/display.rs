@@ -14,6 +14,7 @@ pub fn window_options(macos: bool) -> WindowOptions {
     WindowOptions::new()
         .title("Plicowarden")
         .decorations(false)
+        .corner_radius(16)
         .initial_inner_size(width, height)
         .min_inner_size(min_width, min_height)
 }
