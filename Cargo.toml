@@ -10,11 +10,11 @@ resolver = "3"
 members = ["sdk"]
 
 [dependencies]
-plico = { git = "https://github.com/SunDoge/plico.git", rev = "6b4abf61c9e361262218eccb175e6d397707c7ad" }
-plico-dev = { git = "https://github.com/SunDoge/plico.git", rev = "6b4abf61c9e361262218eccb175e6d397707c7ad" }
-plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "6b4abf61c9e361262218eccb175e6d397707c7ad" }
-plico-desktop = { git = "https://github.com/SunDoge/plico.git", rev = "6b4abf61c9e361262218eccb175e6d397707c7ad", default-features = false, features = ["wgpu", "desktop-integration"] }
-plico-renderer = { git = "https://github.com/SunDoge/plico.git", rev = "6b4abf61c9e361262218eccb175e6d397707c7ad" }
+plico = { git = "https://github.com/SunDoge/plico.git", rev = "46d2e74f286fef3acd94c8a1c5d46bbbb37b7e8f" }
+plico-dev = { git = "https://github.com/SunDoge/plico.git", rev = "46d2e74f286fef3acd94c8a1c5d46bbbb37b7e8f" }
+plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "46d2e74f286fef3acd94c8a1c5d46bbbb37b7e8f" }
+plico-desktop = { git = "https://github.com/SunDoge/plico.git", rev = "46d2e74f286fef3acd94c8a1c5d46bbbb37b7e8f", default-features = false, features = ["wgpu", "desktop-integration"] }
+plico-renderer = { git = "https://github.com/SunDoge/plico.git", rev = "46d2e74f286fef3acd94c8a1c5d46bbbb37b7e8f" }
 plicowarden-sdk = { path = "sdk" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -28,7 +28,7 @@ rfd = "0.17.2"
 [dev-dependencies]
 tempfile = "3"
 pollster = "1"
-plico-wgpu = { git = "https://github.com/SunDoge/plico.git", rev = "6b4abf61c9e361262218eccb175e6d397707c7ad" }
+plico-wgpu = { git = "https://github.com/SunDoge/plico.git", rev = "46d2e74f286fef3acd94c8a1c5d46bbbb37b7e8f" }
 
 [profile.dev]
 opt-level = 1
