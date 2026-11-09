@@ -4425,6 +4425,7 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-graphics",
+ "objc2-core-text",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
 ]
@@ -4486,6 +4487,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cde0dfb48d25d2b4862161a4d5fcc0e3c24367869ad306b0c9ec0073bfed92d"
 dependencies = [
  "bitflags 2.13.2",
+ "objc2 0.6.5",
  "objc2-core-foundation",
  "objc2-core-graphics",
 ]
@@ -5219,7 +5221,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plico"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5236,7 +5238,7 @@ dependencies = [
 [[package]]
 name = "plico-desktop"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "image",
  "peniko",
@@ -5255,7 +5257,7 @@ dependencies = [
 [[package]]
 name = "plico-dev"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5268,7 +5270,7 @@ dependencies = [
 [[package]]
 name = "plico-macros"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5279,7 +5281,7 @@ dependencies = [
 [[package]]
 name = "plico-motion"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "serde",
  "serde_json",
@@ -5289,10 +5291,11 @@ dependencies = [
 [[package]]
 name = "plico-native"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "cairo-rs",
  "lru",
+ "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -5310,7 +5313,7 @@ dependencies = [
 [[package]]
 name = "plico-renderer"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5340,7 +5343,7 @@ dependencies = [
 [[package]]
 name = "plico-runtime"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "elsa",
  "kurbo",
@@ -5363,7 +5366,7 @@ dependencies = [
 [[package]]
 name = "plico-shell"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5399,7 +5402,7 @@ dependencies = [
 [[package]]
 name = "plico-wgpu"
 version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=32c3c493c46bb26587c8f5126f34657abe19ee54#32c3c493c46bb26587c8f5126f34657abe19ee54"
+source = "git+https://github.com/SunDoge/plico.git?rev=d56c20e5f74a4262b53f4fbb68cb6e42ea13db32#d56c20e5f74a4262b53f4fbb68cb6e42ea13db32"
 dependencies = [
  "bytemuck",
  "kurbo",
