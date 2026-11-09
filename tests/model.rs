@@ -154,3 +154,39 @@ fn history_reply_is_scoped_to_selection_and_erased_on_filter_and_lock() {
         app.generated.is_empty() && app.history.is_empty() && app.previous_passwords.is_empty()
     );
 }
+
+#[test]
+fn verification_guards_and_back_navigation_drop_pending_secrets() {
+    use plicowarden_sdk::service::{TwoFactorOption, TwoFactorProviderId};
+    let mut app = Warden::default();
+    app.login_open = true;
+    app.login_password_step = true;
+    app.email = "synthetic@example.invalid".into();
+    app.factors = vec![TwoFactorOption {
+        id: TwoFactorProviderId::Authenticator,
+        label: "Authenticator",
+        hint: None,
+        supported: true,
+    }];
+    app.factor = "webauthn".into();
+    app.otp.set(Zeroizing::new("123456".into()));
+    app.submit_verification();
+    assert!(!app.busy);
+    app.factor = "authenticator".into();
+    app.submit_verification();
+    assert!(app.busy);
+    assert!(app.otp.is_empty());
+    let ticket = app.pending.unwrap();
+    app.apply(Event {
+        ticket,
+        result: Err("Synthetic invalid verification code".into()),
+    });
+    assert!(app.login_focus);
+    app.otp.set(Zeroizing::new("654321".into()));
+    app.back_to_email();
+    assert!(app.factors.is_empty());
+    assert!(app.otp.is_empty());
+    assert!(!app.login_password_step);
+    assert_eq!(app.email, "synthetic@example.invalid");
+    assert!(matches!(app.commands.last(), Some(HostCommand::Disconnect)));
+}

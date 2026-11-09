@@ -38,10 +38,12 @@ export default suite([
   recipe("login-rejected", {
     state: demoVault(),
     steps: [
-      click(button("Connect account")), expect(button("Sign in")).enabled(false),
-      fill("Email address", "recipe@example.invalid"), fill("Master password", "synthetic-recipe-password"),
+      click(button("Connect account")), expect(button("Continue")).enabled(false), capture("email"),
+      fill("Email address", "recipe@example.invalid"), click(button("Continue")), capture("password"),
+      click(button("Back")), expect(textbox("Email address")).value("recipe@example.invalid"),
+      click(button("Continue")), fill("Master password", "synthetic-recipe-password"),
       expect(button("Sign in")).enabled(), click(button("Sign in")),
-      expect(button("Sign in")).enabled(false),
+      expect(button("Logging in…")).enabled(false),
       advance(250),
       accountError("Synthetic account service is offline"),
       expectText("Synthetic account service is offline"),
@@ -67,8 +69,9 @@ export default suite([
       click(button("Deny SSH signature")), expect(button("Allow SSH signature once")).absent(), capture("denied")],
   }),
   recipe("macos-titlebar", {
-    state: demoVault({ native_titlebar: true }),
-    steps: [expect(button("Move window")).exists(), capture("sidebar"),
+    state: demoVault({ custom_titlebar: true }),
+    steps: [expect(button("Close window")).exists(), expect(button("Minimize window")).exists(),
+      expect(button("Maximize or restore window")).exists(), expect(button("Move window")).exists(), capture("sidebar"),
       click(button("Toggle sidebar")), expect(button("Move window")).exists(), capture("sidebar-hidden"),
       click(button("Settings")), expect(button("Close settings")).exists()],
   }),

@@ -31,6 +31,7 @@ enum Error {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum FixtureEvent {
     AccountError { message: String },
+    TwoFactorRequired,
     Locked,
 }
 fn inject(view: &mut NativeApp<Warden>, value: &serde_json::Value) -> Result<(), String> {
@@ -48,6 +49,42 @@ fn inject(view: &mut NativeApp<Warden>, value: &serde_json::Value) -> Result<(),
                 view.0.apply(plicowarden_sdk::Event {
                     ticket,
                     result: Err(message),
+                });
+            }
+        }
+        FixtureEvent::TwoFactorRequired => {
+            use plicowarden_sdk::{
+                Reply, Request,
+                service::{LoginOutcome, TwoFactorOption, TwoFactorProviderId},
+            };
+            let index = view.0.commands.iter().position(|command| matches!(command,
+                HostCommand::Account { ticket, request } if Some(*ticket) == view.0.pending && matches!(request.as_ref(), Request::Login { .. })))
+                .ok_or("two_factor_required requires a pending login request")?;
+            if let HostCommand::Account { ticket, .. } = view.0.commands.remove(index) {
+                view.0.apply(plicowarden_sdk::Event {
+                    ticket,
+                    result: Ok(Reply::Login(LoginOutcome::TwoFactorRequired {
+                        providers: vec![
+                            TwoFactorOption {
+                                id: TwoFactorProviderId::Authenticator,
+                                label: "Authenticator app",
+                                hint: Some("Enter the code from your authenticator app.".into()),
+                                supported: true,
+                            },
+                            TwoFactorOption {
+                                id: TwoFactorProviderId::Email,
+                                label: "Email",
+                                hint: Some("A code will be sent to r***@example.invalid.".into()),
+                                supported: true,
+                            },
+                            TwoFactorOption {
+                                id: TwoFactorProviderId::Webauthn,
+                                label: "Security key",
+                                hint: None,
+                                supported: false,
+                            },
+                        ],
+                    })),
                 });
             }
         }

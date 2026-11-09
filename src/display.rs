@@ -13,7 +13,7 @@ pub fn window_options(macos: bool) -> WindowOptions {
     };
     WindowOptions::new()
         .title("Plicowarden")
-        .titlebar_overlay(macos)
+        .decorations(false)
         .initial_inner_size(width, height)
         .min_inner_size(min_width, min_height)
 }

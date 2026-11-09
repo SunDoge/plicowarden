@@ -160,11 +160,13 @@ pub fn demo_items() -> Vec<Item> {
     .collect()
 }
 pub enum HostCommand {
+    Transfer(crate::transfer::TransferIntent),
     Window(plico_renderer::WindowCommand),
     SshDecision { id: u64, allow: bool },
     Account { ticket: u64, request: Box<Request> },
     Disconnect,
     SaveAppearance(Appearance),
+    SaveSecurity(crate::security::SecuritySettings),
 }
 pub struct Editor {
     pub id: Option<String>,
@@ -291,11 +293,22 @@ pub struct Warden {
     pub filter: String,
     pub selected: String,
     pub ascending: bool,
+    pub transfer: crate::transfer::TransferForm,
+    pub transfer_dialog: bool,
+    pub transfer_modal: ModalState,
+    pub bulk_mode: bool,
+    pub bulk_selected: std::collections::BTreeSet<String>,
+    pub bulk_confirm: Option<String>,
+    pub bulk_modal: ModalState,
     pub sidebar: bool,
-    pub native_titlebar: bool,
+    pub custom_titlebar: bool,
     pub titlebar_pressed: bool,
     pub reveal: bool,
     pub settings_open: bool,
+    pub settings_tab: String,
+    pub security: crate::security::SecuritySettings,
+    pub active_security: crate::security::SecuritySettings,
+    pub security_saving: bool,
     pub login_open: bool,
     pub appearance: Appearance,
     pub zoom: plico_runtime::ZoomController,
@@ -308,12 +321,20 @@ pub struct Warden {
     pub shown_password: Option<Zeroizing<String>>,
     pub code: Option<TotpCode>,
     pub editor: Option<Editor>,
+    pub move_modal: ModalState,
+    pub move_ids: Vec<String>,
+    pub move_folder: String,
     pub folders_modal: ModalState,
     pub confirm_modal: ModalState,
     pub confirm_action: Option<(String, String)>,
     pub folder_name: String,
     pub folder_names: BTreeMap<String, String>,
     pub popups: BTreeMap<String, plico::PopoverState>,
+    pub login_password_step: bool,
+    pub login_show_password: bool,
+    pub environment_open: bool,
+    pub environment_error: String,
+    pub login_focus: bool,
     pub region: String,
     pub server: String,
     pub email: String,
@@ -352,11 +373,22 @@ impl Default for Warden {
             filter: "All Items".into(),
             selected: "github".into(),
             ascending: true,
+            transfer: Default::default(),
+            transfer_dialog: false,
+            transfer_modal: ModalState::default(),
+            bulk_mode: false,
+            bulk_selected: Default::default(),
+            bulk_confirm: None,
+            bulk_modal: ModalState::default(),
             sidebar: true,
-            native_titlebar: cfg!(target_os = "macos"),
+            custom_titlebar: true,
             titlebar_pressed: false,
             reveal: false,
             settings_open: false,
+            settings_tab: "appearance".into(),
+            security: Default::default(),
+            active_security: Default::default(),
+            security_saving: false,
             login_open: false,
             appearance: Appearance::default(),
             zoom: Appearance::default().zoom_controller(),
@@ -369,13 +401,21 @@ impl Default for Warden {
             shown_password: None,
             code: None,
             editor: None,
+            move_modal: ModalState::default(),
+            move_ids: Vec::new(),
+            move_folder: String::new(),
             folders_modal: ModalState::default(),
             confirm_modal: ModalState::default(),
             confirm_action: None,
             folder_name: String::new(),
             folder_names: BTreeMap::new(),
             popups: BTreeMap::new(),
-            region: "self-hosted".into(),
+            login_password_step: false,
+            login_show_password: false,
+            environment_open: false,
+            environment_error: String::new(),
+            login_focus: false,
+            region: "us".into(),
             server: String::new(),
             email: String::new(),
             password: TextBuffer::secret(),
@@ -425,6 +465,7 @@ impl Warden {
                 }) && (!self.filter.starts_with("folder:")
                     || i.folder.as_deref() == Some(&self.filter[7..]))
                     && match self.filter.as_str() {
+                        "No folder" => i.folder.is_none(),
                         "Favorites" => i.favorite,
                         "Logins" => i.kind == "login",
                         "Cards" => i.kind == "card",
@@ -445,6 +486,71 @@ impl Warden {
             result.reverse();
         }
         result
+    }
+    pub fn open_move_dialog(&mut self, ids: Vec<String>) {
+        if !self.authenticated || self.busy || self.editor.is_some() || ids.is_empty() {
+            return;
+        }
+        let mut unique = std::collections::BTreeSet::new();
+        if ids.len() > 500
+            || ids.iter().any(|id| {
+                !unique.insert(id.clone())
+                    || !self
+                        .items
+                        .iter()
+                        .any(|item| &item.id == id && !item.deleted)
+            })
+        {
+            return;
+        }
+        let folders: std::collections::BTreeSet<_> = ids
+            .iter()
+            .map(|id| {
+                self.items
+                    .iter()
+                    .find(|item| &item.id == id)
+                    .and_then(|item| item.folder.clone())
+            })
+            .collect();
+        self.move_folder = if folders.len() == 1 {
+            folders.into_iter().next().flatten().unwrap_or_default()
+        } else {
+            String::new()
+        };
+        self.error.clear();
+        self.move_ids = ids;
+        self.move_modal.open();
+    }
+    pub fn move_items(&mut self) {
+        if !self.authenticated
+            || self.busy
+            || !self.move_modal.is_open()
+            || self.move_ids.is_empty()
+        {
+            return;
+        }
+        if !self.move_folder.is_empty()
+            && !self
+                .folders
+                .iter()
+                .any(|folder| folder.id == self.move_folder)
+        {
+            self.error = "The destination folder no longer exists. Sync and choose again.".into();
+            return;
+        }
+        let ids = std::mem::take(&mut self.move_ids);
+        let folder_id = (!self.move_folder.is_empty()).then(|| self.move_folder.clone());
+        self.move_modal.close();
+        self.request(Request::MoveToFolder { ids, folder_id });
+    }
+    pub fn apply_bulk_action(&mut self, action: &str) {
+        if !self.authenticated || self.busy || self.bulk_selected.is_empty() {
+            return;
+        }
+        self.request(Request::BatchAction {
+            ids: self.bulk_selected.iter().cloned().collect(),
+            action: action.into(),
+        });
     }
     pub fn request(&mut self, request: Request) {
         if self.busy {
@@ -477,6 +583,7 @@ impl Warden {
         }
     }
     pub fn set_filter(&mut self, filter: &str) {
+        self.bulk_selected.clear();
         self.filter = filter.into();
         self.reveal = false;
         self.reveal_history = false;
@@ -486,6 +593,16 @@ impl Warden {
     }
     pub fn lock(&mut self) {
         self.commands.clear();
+        self.move_modal.close();
+        self.move_ids.clear();
+        self.move_folder.clear();
+        self.transfer_modal.close();
+        self.transfer.clear_secrets();
+        self.transfer_dialog = false;
+        self.bulk_selected.clear();
+        self.bulk_mode = false;
+        self.bulk_confirm = None;
+        self.bulk_modal.close();
         self.commands.push(HostCommand::Disconnect);
         self.pending = None;
         self.busy = false;
@@ -500,6 +617,11 @@ impl Warden {
         self.code = None;
         self.editor = None;
         self.password.clear();
+        self.login_password_step = false;
+        self.login_show_password = false;
+        self.environment_open = false;
+        self.environment_error.clear();
+        self.login_focus = true;
         self.otp.clear();
         self.factors.clear();
         self.account_email.clear();
@@ -519,6 +641,78 @@ impl Warden {
         self.confirm_action = None;
         self.error.clear();
         self.notice = "Vault locked.".into();
+    }
+    pub fn validate_login_server(&mut self) -> bool {
+        self.environment_error.clear();
+        if self.region == "self-hosted" {
+            let config = plicowarden_sdk::server::CustomServer {
+                api: optional(&self.api_url),
+                identity: optional(&self.identity_url),
+                icons: optional(&self.icons_url),
+                ..Default::default()
+            };
+            if let Err(error) = config.resolve(Some(&self.server)) {
+                self.environment_error = error;
+                self.environment_open = true;
+                return false;
+            }
+        }
+        true
+    }
+    pub fn submit_verification(&mut self) {
+        if self.busy
+            || self.otp.is_empty()
+            || !self
+                .factors
+                .iter()
+                .any(|p| factor_id(p.id) == self.factor && p.supported)
+        {
+            return;
+        }
+        self.request(Request::TwoFactor(
+            plicowarden_sdk::service::TwoFactorSubmitRequest {
+                provider: self.factor.clone(),
+                token: self.otp.take(),
+            },
+        ));
+    }
+    pub fn continue_login(&mut self) {
+        if self.busy {
+            return;
+        }
+        let email = self.email.trim();
+        if !email.split_once('@').is_some_and(|(name, domain)| {
+            !name.is_empty() && domain.contains('.') && !email.contains(char::is_whitespace)
+        }) {
+            self.error = "Enter a valid email address.".into();
+            return;
+        }
+        if !self.validate_login_server() {
+            return;
+        }
+        self.email = self.email.trim().to_owned();
+        self.error.clear();
+        self.notice.clear();
+        self.environment_open = false;
+        self.login_password_step = true;
+        self.login_focus = true;
+        self.login_show_password = false;
+    }
+    pub fn back_to_email(&mut self) {
+        if self.busy {
+            return;
+        }
+        if !self.factors.is_empty() {
+            self.commands.push(HostCommand::Disconnect);
+        }
+        self.factors.clear();
+        self.password.clear();
+        self.otp.clear();
+        self.login_focus = true;
+        self.login_password_step = false;
+        self.login_show_password = false;
+        self.error.clear();
+        self.notice.clear();
     }
     pub fn login(&mut self) {
         if self.busy {
@@ -617,6 +811,11 @@ impl Warden {
             self.notice = "Locked after inactivity or session expiry.".into();
             return;
         }
+        if matches!(&event.result, Ok(Reply::SecurityConfigured(_))) {
+            // The host's last successfully saved settings remain authoritative;
+            // an older queued worker acknowledgement must not roll them back.
+            return;
+        }
         if event.ticket == 0 {
             match &event.result {
                 Ok(Reply::SshApproval(approval)) => {
@@ -645,6 +844,7 @@ impl Warden {
                 self.busy = false;
                 self.pending = None;
                 self.error = error;
+                self.login_focus = self.login_open;
             }
             return;
         }
@@ -656,9 +856,42 @@ impl Warden {
         match event.result {
             Err(error) => {
                 self.error = error;
+                self.login_focus = self.login_open;
                 self.save_in_flight = false;
             }
             Ok(reply) => match reply {
+                Reply::SecurityConfigured(_) => {}
+                Reply::Transfer(result) => {
+                    if let Some(snapshot) = result.snapshot {
+                        self.snapshot(snapshot);
+                    }
+                    self.notice = result.message;
+                }
+                Reply::BatchMutation(result) => {
+                    let was_bulk = self.bulk_mode;
+                    let count = result.succeeded.len();
+                    let errors: Vec<_> = result
+                        .failed
+                        .iter()
+                        .map(|failure| failure.message.clone())
+                        .collect();
+                    let failed: std::collections::BTreeSet<_> = result
+                        .failed
+                        .into_iter()
+                        .map(|failure| failure.id)
+                        .collect();
+                    self.snapshot(result.snapshot);
+                    self.bulk_selected = failed;
+                    self.bulk_mode = was_bulk && !self.bulk_selected.is_empty();
+                    self.notice =
+                        format!("Updated {count} item{}.", if count == 1 { "" } else { "s" });
+                    if !errors.is_empty() {
+                        if !self.error.is_empty() {
+                            self.error.push('\n');
+                        }
+                        self.error.push_str(&errors.join("\n"));
+                    }
+                }
                 Reply::Login(LoginOutcome::Authenticated { snapshot }) => {
                     self.filter = "All Items".into();
                     self.query.clear();
@@ -671,6 +904,7 @@ impl Warden {
                         .map(|p| factor_id(p.id).into())
                         .unwrap_or_default();
                     self.factors = providers;
+                    self.login_focus = true;
                 }
                 Reply::SshStatus(socket) => {
                     self.ssh_socket = if self.authenticated { socket } else { None };
@@ -712,7 +946,14 @@ impl Warden {
                     self.notice = "Vault updated.".into();
                 }
                 Reply::Copied => {
-                    self.notice = "Copied. Clipboard clears after 30 seconds if unchanged.".into()
+                    self.notice = format!(
+                        "Copied. Clipboard clears after {} seconds if unchanged.",
+                        self.active_security.clipboard_seconds
+                    );
+                    if self.active_security.minimize_on_copy {
+                        self.commands
+                            .push(HostCommand::Window(plico_renderer::WindowCommand::Minimize));
+                    }
                 }
                 Reply::EmailSent => self.notice = "Verification email sent.".into(),
                 Reply::Locked | Reply::TotpExpired(_) => {}

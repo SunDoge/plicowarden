@@ -26,7 +26,7 @@ This is an independent GPL-3.0-only Cargo workspace. Plico stays Apache-2.0;
 it does not depend on Plicowarden or the Bitwarden SDK. The `sdk/` package is
 `plicowarden-sdk`; the application package/binary is `plicowarden`.
 
-Plico dependencies are pinned to Git commit `cdd910140913ada0cf078216f3b38be71d5292f3`
+Plico dependencies are pinned to Git commit `9c3eab38a16c8151b32275135ccc7f82fa9a3e8f`
 from `https://github.com/SunDoge/plico.git`. Cargo fetches the framework;
 a sibling Plico checkout is not required. `Cargo.lock` records the same source.
 No original Warden, Warden Desktop, Wabou or .NET checkout is needed.
@@ -69,16 +69,36 @@ so small dimmed controls do not each allocate a full Retina window texture;
 the 128 MiB frame budget remains in place.
 
 Reference JSON/TS preview fixtures remain at 100% density on every platform.
-On macOS the glass toolbar extends into a transparent native titlebar while
-retaining native window controls. Drag the title area to move the window;
-toolbar buttons remain independent. Collapsed-sidebar and login layouts reserve
-space for the native controls. Headless previews reserve that space but do not
-draw AppKit controls; other platforms retain their native titlebar.
+The application draws its own window controls on the glass header: close,
+minimize and maximize/restore. Native decorations are disabled, so the controls
+appear in both normal windows and headless previews. They retain OS-point sizing
+independent of content zoom. The same controls are available on the login page;
+the title region starts an OS-managed window drag. Maximize/restore queries the
+current native state rather than maintaining an application-side guess.
 
 For synthetic 85% captures at both 1× and Retina 2× backing density:
 
 ```sh
 cargo run --locked --example display_probe -- --output reports/display
+```
+
+## Login flow
+
+Login follows the local official Bitwarden client's email → master-password flow.
+The server selector sits below the form; self-hosted endpoints expand only when
+requested. Returning to email preserves the address and clears secrets. The form
+supports Enter, focus recovery after errors, password visibility, cancellation
+and the existing two-factor providers. Escape returns to email or dismisses server
+settings. Invalid self-hosted endpoints are reported before submitting credentials;
+changing verification methods clears the previous code. It does not advertise unsupported SSO/passkey login.
+
+Reference: `bitwarden/clients/libs/auth/src/angular/login/login.component.html`,
+`libs/angular/src/auth/environment-selector/environment-selector.component.html`
+and `libs/components/src/anon-layout/anon-layout.component.html` (read-only design
+references; no Angular source copied).
+
+```sh
+python3 scripts/run-recipes.py --suite recipes/login-review.ts
 ```
 
 ## Memory regression probe
@@ -123,6 +143,27 @@ The `plico new` template follows the same fast-iteration policy for new apps.
   `LiquidGlass` parameters and `Elevation` presets. No app-local glass shader.
   Motion runs in the renderer; reduce motion disables moving reflections.
 
+## Official client parity
+
+See [the capability inventory](docs/client-parity.md) for implemented paths,
+verification limits and the remaining official desktop-client work. The normal vault
+keeps navigation/list/details visible at the supported minimum window size; screenshots
+with a hidden sidebar are explicitly toggled states, not the default.
+
+Single and bulk folder moves preserve the complete item payload and revision
+preconditions, validate destination membership and report partial failures. No folder
+filters out archived/trashed items. Bulk selection supports favorite/archive/trash/restore/purge with destructive
+confirmation and partial-failure reporting. Import / Export provides personal-vault
+JSON/password-protected JSON exports and official-SDK KeePass KDBX import. Native
+file dialogs run in the host; credentials and decrypted export data remain in workers.
+Exports never overwrite an existing file; Unix export files are created with mode 0600.
+
+```sh
+python3 scripts/run-recipes.py --suite recipes/folder-review.ts
+python3 scripts/run-recipes.py --suite recipes/bulk-review.ts
+python3 scripts/run-recipes.py --suite recipes/transfer-review.ts
+```
+
 ## Implemented paths
 
 Search, reverse sort, type/favorite/folder/archive/trash filters, item selection,
@@ -143,9 +184,53 @@ Password history is fetched on explicit reveal, respects password-view permissio
 The generator supports passwords, 6–12-word EFF short-list passphrases and readable random usernames (availability is not checked). All modes use OS cryptographic randomness with unbiased selection, required
 character groups and a shuffled result. History is memory-only and cleared on
 lock. SDK sessions, requests and replies are not Debug/Serialize UI state.
-Clipboard expiry/ownership and five-minute SDK idle locking stay in the worker;
+Settings has Appearance, Security and SSH agent sections. Device-local `security.json`
+stores only auto-lock (1/5/15/30/60 minutes), clipboard expiry (10/30/60/120 seconds)
+and minimize-after-copy preferences. Defaults remain five minutes and 30 seconds.
+Successful saves update an existing worker as well as future connections.
+Clicks, typing, dragging and scrolling refresh live sessions; hover and rendering do not.
+Expired sessions cannot be revived by new input. Clipboard expiry clears only app-owned,
+unchanged content. These services stay in the worker;
 lock disconnects the old actor and ignores obsolete replies. Expired TOTP values
 are removed via worker wakeups, without reading system time inside components.
+
+## Tray and system notifications
+
+Plico provides the native tray/menu/notification lifecycle through its optional
+`plico-desktop/desktop-integration` feature. This app supplies branding, menu IDs,
+SSH notification policy and preference persistence; it does not depend directly on
+tray-icon, notify-rust, zbus or plico-shell.
+
+Normal launches create a native tray icon (a template image in the macOS menu bar).
+Its menu opens the window, locks the vault, or quits the process. Closing the app
+window keeps its SDK worker alive when a tray host is available; automatic locking
+continues while hidden. Quit revokes the SSH signing gate and drops the worker.
+The menu has persistent “Keep running when closed” and “SSH approval notifications”
+options in device-local `desktop.json`, both enabled by default.
+
+New accepted SSH approval requests show a generic system notification. Clicking it
+opens the app; it never approves signing. Names, fingerprints, processes and secrets
+are excluded from notification text. At most one notification observer runs at a time.
+The platform controls notification permissions and delivery; signing approval remains
+usable inside the app if delivery is unavailable. Windows notification app identity and
+macOS notification delivery still need packaged-app validation.
+
+Linux uses StatusNotifierItem over D-Bus without GTK. Without a registered tray host,
+closing exits normally. If the host disappears while the window is hidden, it is shown
+again. Native tray initialization failures also preserve normal close/exit behavior.
+This is separate from start-at-login, a single-instance service, OS screen-lock handling,
+and application menus, which remain pending.
+
+The Linux native smoke test uses isolated D-Bus/X11 services and only synthetic data:
+
+```sh
+cargo build --locked --example desktop_probe
+/usr/bin/python3 scripts/check-native-tray.py --binary target/debug/examples/desktop_probe
+```
+
+It needs Xvfb, xdotool, dbus-run-session, and system Python's dbus/GLib bindings.
+It checks native menus, hiding/restoration, notification activation, saved preferences,
+tray-host loss, quit and the no-tray fallback. It does not substitute for macOS testing.
 
 ## Validation and limits
 
@@ -158,7 +243,7 @@ plico fmt --check src tests sdk/src
 To install the matching formatter CLI when needed:
 
 ```sh
-cargo install --git https://github.com/SunDoge/plico.git --rev cdd910140913ada0cf078216f3b38be71d5292f3 --locked plico-cli
+cargo install --git https://github.com/SunDoge/plico.git --rev 9c3eab38a16c8151b32275135ccc7f82fa9a3e8f --locked plico-cli
 ```
 
 Tests drive real declarations, layout and native input through the deterministic
@@ -228,6 +313,15 @@ client or user preferences. Failures retain source location, flow, semantic evid
 last successful capture and a failure PNG. This supersedes `recipe_probe` for
 composable test authoring; the older runner remains for its original benchmark.
 
+## Glass controls
+
+Action buttons and circular tools use Plico's scene-backed button material,
+continuous capsule contours, contact/ambient shadows and material hover/press
+feedback. Primary actions use accent-tinted glass. Folder/list navigation remains
+quiet. Dialogs use the same framework material on a fixed background, with denser
+frost/tint for readable form text, overlay shadows and a lighter scrim. Dialog
+content scrolls independently of its material surface. The appearance switch disables control glass as well as panel glass.
+
 ## Glass material verification
 
 Default frost/tint are 0.42/0.26. Existing saved appearance settings are retained;
@@ -239,6 +333,6 @@ surfaces retain a translucent white fill. Shadows are separate from refraction.
 cargo test --locked -p plico-desktop --no-default-features --features wgpu --test materials -- --ignored
 ```
 
-Run this framework-only command in a Plico checkout at `cdd910140913ada0cf078216f3b38be71d5292f3`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
+Run this framework-only command in a Plico checkout at `9c3eab38a16c8151b32275135ccc7f82fa9a3e8f`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
 checks that the curved edge changes while the flat center does not, verifies two
 shadow layers reach the renderer, and checks repeat captures remain identical.

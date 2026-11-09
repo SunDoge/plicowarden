@@ -34,8 +34,14 @@ fn rejected_http_login_wakes_ui_clears_password_and_can_return_to_demo() {
     }));
     let mut ui = Driver::new(host, 1440, 1000).unwrap();
     click(&mut ui, "Connect account");
-    type_text(&mut ui, "Server URL", "http://example.invalid");
+    click(&mut ui, "bitwarden.com");
+    click(&mut ui, "Self-hosted");
+    type_text(&mut ui, "Server URL", "https://example.invalid");
+    click(&mut ui, "Done");
     type_text(&mut ui, "Email address", "test@example.invalid");
+    click(&mut ui, "Continue");
+    // Bypass UI validation deliberately to exercise the SDK worker error path.
+    ui.source.view.app.server = "http://example.invalid".into();
     type_text(&mut ui, "Master password", "synthetic-test-password");
     let tree = serde_json::to_string(&ui.declarations()).unwrap();
     assert!(!tree.contains("synthetic-test-password"));
@@ -92,7 +98,7 @@ fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
         WindowCommand,
     };
     let mut app = Warden::default();
-    app.native_titlebar = true;
+    app.custom_titlebar = true;
     let mut ui = Driver::new(Host::new(app, false), 1440, 1000).unwrap();
     click(&mut ui, "Settings");
     assert!(ui.source.view.app.settings_open);
@@ -131,5 +137,74 @@ fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
             ui.source.take_host_action().is_none(),
             "drag command repeated while held"
         );
+    }
+}
+
+#[test]
+fn custom_window_buttons_dispatch_real_commands_on_vault_and_login() {
+    use plico_renderer::{HostAction, WindowCommand};
+    for login in [false, true] {
+        let mut app = Warden::default();
+        app.login_open = login;
+        let mut ui = Driver::new(Host::new(app, false), 820, 640).unwrap();
+        for (label, expected) in [
+            ("Minimize window", WindowCommand::Minimize),
+            ("Maximize or restore window", WindowCommand::ToggleMaximized),
+            ("Maximize or restore window", WindowCommand::ToggleMaximized),
+            ("Close window", WindowCommand::Close),
+        ] {
+            click(&mut ui, label);
+            assert_eq!(
+                ui.source.take_host_action(),
+                Some(HostAction::Window(expected))
+            );
+            assert!(ui.source.take_host_action().is_none());
+        }
+    }
+}
+
+#[test]
+fn saving_security_updates_live_preferences_only_after_successful_persistence() {
+    for fail in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = if fail {
+            directory.path().to_owned()
+        } else {
+            directory.path().join("security.json")
+        };
+        let (tx, rx) = mpsc::channel();
+        let mut host = Host::new(Warden::default(), false).with_security_path(path.clone());
+        host.set_wake_callback(Arc::new(move || {
+            let _ = tx.send(());
+        }));
+        let mut ui = Driver::new(host, 820, 640).unwrap();
+        click(&mut ui, "Settings");
+        ui.execute(Command::Click {
+            role: "button".into(),
+            label: "Security".into(),
+            occurrence: None,
+        })
+        .unwrap();
+        ui.source.view.app.security.auto_lock_minutes = 1;
+        ui.source.view.app.security.clipboard_seconds = 10;
+        click(&mut ui, "Save changes");
+        while ui.source.view.app.security_saving {
+            rx.recv_timeout(Duration::from_secs(10))
+                .expect("security worker did not finish");
+            ui.source.poll_async();
+            ui.execute(Command::Snapshot).unwrap();
+        }
+        if fail {
+            assert!(!ui.source.view.app.error.is_empty());
+            assert_eq!(ui.source.view.app.active_security.auto_lock_minutes, 5);
+        } else {
+            assert_eq!(
+                plicowarden::security::load(&path)
+                    .unwrap()
+                    .auto_lock_minutes,
+                1
+            );
+            assert_eq!(ui.source.view.app.active_security.clipboard_seconds, 10);
+        }
     }
 }

@@ -1,5 +1,7 @@
 mod items;
-pub use items::{EditData, ItemPatch, Mutation};
+mod transfer;
+pub use items::{BatchFailure, BatchMutation, EditData, ItemPatch, Mutation};
+pub use transfer::{ExportKind, TransferResult};
 mod writes;
 pub use writes::LoginWrite;
 // Adapted from Warden Desktop's GPL-3.0-only SDK service (see the app README).
@@ -198,6 +200,7 @@ pub struct TotpCode {
 #[derive(Default)]
 struct CapturedVault {
     ciphers: Vec<Cipher>,
+    folders: Vec<bitwarden_vault::Folder>,
     parse_failures: usize,
     user_id: Option<uuid::Uuid>,
     organization_keys: Vec<(uuid::Uuid, String)>,
@@ -217,8 +220,16 @@ impl SyncHandler for CipherCapture {
                 Err(_) => parse_failures += 1,
             }
         }
+        let mut folders = Vec::new();
+        for model in response.folders.as_deref().unwrap_or_default() {
+            match bitwarden_vault::Folder::try_from(model.clone()) {
+                Ok(folder) => folders.push(folder),
+                Err(_) => parse_failures += 1,
+            }
+        }
         *self.0.write().await = CapturedVault {
             ciphers,
+            folders,
             parse_failures,
             user_id: response.profile.as_ref().and_then(|profile| profile.id),
             organization_keys: response
@@ -255,6 +266,7 @@ pub struct VaultService {
     session: Option<Session>,
     pending_login: Option<PendingLogin>,
     auto_lock_after: Duration,
+    clipboard_seconds: u32,
     clipboard: std::sync::OnceLock<crate::clipboard::ClipboardService>,
 }
 
@@ -264,12 +276,31 @@ impl Default for VaultService {
             session: None,
             pending_login: None,
             auto_lock_after: DEFAULT_AUTO_LOCK_AFTER,
+            clipboard_seconds: 30,
             clipboard: std::sync::OnceLock::new(),
         }
     }
 }
 
 impl VaultService {
+    pub fn configure_security(&mut self, settings: crate::security::SecuritySettings) {
+        let settings = settings.validated();
+        self.auto_lock_after = Duration::from_secs(u64::from(settings.auto_lock_minutes) * 60);
+        self.clipboard_seconds = settings.clipboard_seconds;
+        if let Some(clipboard) = self.clipboard.get() {
+            clipboard.set_lifetime(settings.clipboard_seconds);
+        }
+    }
+    pub fn note_activity(&mut self) -> bool {
+        // Input cannot revive a session whose deadline has already elapsed.
+        if self.lock_if_idle() {
+            return true;
+        }
+        if let Some(session) = &self.session {
+            touch(session);
+        }
+        false
+    }
     pub async fn login(
         &mut self,
         request: LoginRequest,
@@ -625,7 +656,11 @@ impl VaultService {
 
     pub async fn copy_text(&self, text: Zeroizing<String>) -> Result<(), String> {
         self.clipboard
-            .get_or_init(crate::clipboard::ClipboardService::new)
+            .get_or_init(|| {
+                crate::clipboard::ClipboardService::new(Duration::from_secs(u64::from(
+                    self.clipboard_seconds,
+                )))
+            })
             .copy(text)
             .await
     }
@@ -664,7 +699,7 @@ impl VaultService {
         }) || self
             .pending_login
             .as_ref()
-            .is_some_and(|pending| pending.created_at.elapsed() >= self.auto_lock_after);
+            .is_some_and(|pending| pending.created_at.elapsed() >= DEFAULT_AUTO_LOCK_AFTER);
         if expired {
             self.lock();
         }
@@ -1147,6 +1182,74 @@ mod tests {
         assert!(service.lock_if_idle());
         assert!(service.pending_login.is_none());
         assert!(service.is_locked());
+    }
+    fn idle_service(seconds: u64) -> VaultService {
+        let client = PasswordManagerClient::new(None);
+        VaultService {
+            session: Some(Session {
+                email: "test@example.invalid".into(),
+                sync: client.sync(),
+                client,
+                capture: Arc::new(CipherCapture::default()),
+                last_activity: StdMutex::new(Instant::now() - Duration::from_secs(seconds)),
+                icon_base_url: String::new(),
+            }),
+            ..Default::default()
+        }
+    }
+    #[test]
+    fn activity_refreshes_a_live_session_but_cannot_revive_an_expired_session() {
+        let settings = crate::security::SecuritySettings {
+            auto_lock_minutes: 1,
+            ..Default::default()
+        };
+        let mut service = idle_service(1);
+        service.configure_security(settings);
+        assert!(!service.note_activity());
+        assert!(
+            service
+                .session
+                .as_ref()
+                .unwrap()
+                .last_activity
+                .lock()
+                .unwrap()
+                .elapsed()
+                < Duration::from_secs(1)
+        );
+        let mut service = idle_service(61);
+        service.configure_security(settings);
+        assert!(service.note_activity());
+        assert!(service.is_locked());
+    }
+    #[test]
+    fn shortening_timeout_applies_to_the_existing_session() {
+        let mut service = idle_service(61);
+        assert!(!service.lock_if_idle());
+        service.configure_security(crate::security::SecuritySettings {
+            auto_lock_minutes: 1,
+            ..Default::default()
+        });
+        assert!(service.lock_if_idle());
+    }
+    #[test]
+    fn session_preferences_do_not_shorten_the_two_factor_challenge() {
+        let mut service = VaultService {
+            pending_login: Some(PendingLogin {
+                email: "test@example.invalid".into(),
+                client: PasswordManagerClient::new(None),
+                password: Zeroizing::new("synthetic".into()),
+                created_at: Instant::now() - Duration::from_secs(61),
+                icon_base_url: String::new(),
+            }),
+            ..Default::default()
+        };
+        service.configure_security(crate::security::SecuritySettings {
+            auto_lock_minutes: 1,
+            ..Default::default()
+        });
+        assert!(!service.lock_if_idle());
+        assert!(service.pending_login.is_some());
     }
     #[tokio::test]
     async fn cancelled_login_aborts_its_spawned_sdk_task() {

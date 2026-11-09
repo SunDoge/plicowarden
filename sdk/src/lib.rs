@@ -1,6 +1,7 @@
 //! GPL-3.0-only Warden application service. SDK sessions live only in this actor.
 mod clipboard;
 pub mod protected;
+pub mod security;
 pub mod server;
 pub mod service;
 pub mod ssh_agent;
@@ -19,6 +20,7 @@ use zeroize::Zeroizing;
 pub type Wake = Arc<dyn Fn() + Send + Sync>;
 /// Deliberately not Debug/Serialize: requests can contain credentials.
 pub enum Request {
+    ConfigureSecurity(security::SecuritySettings),
     Login {
         config: LoginRequest,
         password: Zeroizing<String>,
@@ -45,6 +47,24 @@ pub enum Request {
         id: Option<String>,
         patch: ItemPatch,
     },
+    ExportVault {
+        path: std::path::PathBuf,
+        format: service::ExportKind,
+        password: Zeroizing<String>,
+    },
+    ImportKdbx {
+        path: std::path::PathBuf,
+        password: Zeroizing<String>,
+        key_file: Option<std::path::PathBuf>,
+    },
+    MoveToFolder {
+        ids: Vec<String>,
+        folder_id: Option<String>,
+    },
+    BatchAction {
+        ids: Vec<String>,
+        action: String,
+    },
     Action {
         id: String,
         action: String,
@@ -56,6 +76,7 @@ pub enum Request {
     },
 }
 pub enum Reply {
+    SecurityConfigured(security::SecuritySettings),
     Login(LoginOutcome),
     Snapshot(VaultSnapshot),
     Details(Box<ItemDetails>),
@@ -67,6 +88,8 @@ pub enum Reply {
     Totp(TotpCode),
     Edit(EditData),
     Mutation(Mutation),
+    BatchMutation(service::BatchMutation),
+    Transfer(service::TransferResult),
     Copied,
     EmailSent,
     Locked,
@@ -94,6 +117,7 @@ pub struct Client {
     close: watch::Sender<bool>,
     wake: Arc<Mutex<Option<Wake>>>,
     agent_gate: ssh_agent::Gate,
+    activity: Arc<std::sync::atomic::AtomicBool>,
 }
 impl Default for Client {
     fn default() -> Self {
@@ -102,6 +126,11 @@ impl Default for Client {
 }
 impl Client {
     pub fn new() -> Self {
+        Self::with_security(Default::default())
+    }
+    pub fn with_security(settings: security::SecuritySettings) -> Self {
+        let activity = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let worker_activity = activity.clone();
         let (tx, mut incoming) = async_mpsc::channel::<Work>(8);
         let (outgoing, rx) = mpsc::channel();
         let (close, mut closed) = watch::channel(false);
@@ -132,14 +161,17 @@ impl Client {
             };
             runtime.block_on(async {
                 let mut service = VaultService::default();
+                service.configure_security(settings);
                 let mut broker = ssh_agent::Broker::new(access.clone());
                 let mut agent: Option<ssh_agent::RunningAgent> = None;
                 let mut interval = tokio::time::interval(Duration::from_secs(1));
                 let mut code_expiry: Option<i64> = None;
                 loop {
+                    observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
                     let work = tokio::select! { biased;
                         _ = closed.changed() => break,
                         _ = interval.tick() => {
+                            observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
                             if service.lock_if_idle() {
                                 stop_agent(&access, &mut agent, &mut broker, &notify);
                                 code_expiry=None; notify(Event { ticket: 0, result: Ok(Reply::Locked) });
@@ -170,6 +202,7 @@ impl Client {
                     if matches!(&work.request, Request::Login { .. } | Request::TwoFactor(_)) {
                         stop_agent(&access, &mut agent, &mut broker, &notify);
                     }
+                    observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
                     if service.lock_if_idle() {
                         stop_agent(&access, &mut agent, &mut broker, &notify);
                         notify(Event { ticket: 0, result: Ok(Reply::Locked) });
@@ -227,7 +260,12 @@ impl Client {
             close,
             wake,
             agent_gate,
+            activity,
         }
+    }
+    pub fn note_activity(&self) {
+        self.activity
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
     pub fn send(&self, ticket: u64, request: Request) -> Result<(), SendError> {
         if matches!(&request, Request::SshAgent(false)) {
@@ -254,6 +292,11 @@ impl Drop for Client {
 }
 async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, String> {
     Ok(match request {
+        Request::ConfigureSecurity(settings) => {
+            let settings = settings.validated();
+            service.configure_security(settings);
+            Reply::SecurityConfigured(settings)
+        }
         Request::Login { config, password } => {
             if config.email.trim().is_empty() || password.is_empty() {
                 return Err("Enter your email and master password.".into());
@@ -288,11 +331,50 @@ async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, 
         Request::Save { id, patch } => {
             Reply::Mutation(service.save_item(id.as_deref(), patch).await?)
         }
+        Request::ExportVault {
+            path,
+            format,
+            password,
+        } => Reply::Transfer(service.export_file(&path, format, password).await?),
+        Request::ImportKdbx {
+            path,
+            password,
+            key_file,
+        } => Reply::Transfer(
+            service
+                .import_kdbx_file(&path, password, key_file.as_deref())
+                .await?,
+        ),
+        Request::MoveToFolder { ids, folder_id } => {
+            Reply::BatchMutation(service.move_to_folder(ids, folder_id.as_deref()).await?)
+        }
+        Request::BatchAction { ids, action } => {
+            Reply::BatchMutation(service.batch_action(ids, &action).await?)
+        }
         Request::Action { id, action } => Reply::Mutation(service.item_action(&id, &action).await?),
         Request::Folder { id, name, delete } => {
             Reply::Mutation(service.folder_action(id.as_deref(), &name, delete).await?)
         }
     })
+}
+
+fn observe_activity(
+    service: &mut VaultService,
+    activity: &std::sync::atomic::AtomicBool,
+    gate: &ssh_agent::Gate,
+    agent: &mut Option<ssh_agent::RunningAgent>,
+    broker: &mut ssh_agent::Broker,
+    code_expiry: &mut Option<i64>,
+    notify: &impl Fn(Event),
+) {
+    if activity.swap(false, std::sync::atomic::Ordering::Relaxed) && service.note_activity() {
+        stop_agent(gate, agent, broker, notify);
+        *code_expiry = None;
+        notify(Event {
+            ticket: 0,
+            result: Ok(Reply::Locked),
+        });
+    }
 }
 
 fn stop_agent(

@@ -23,6 +23,15 @@ pub struct Mutation {
     pub snapshot: VaultSnapshot,
     pub id: Option<String>,
 }
+pub struct BatchFailure {
+    pub id: String,
+    pub message: String,
+}
+pub struct BatchMutation {
+    pub snapshot: VaultSnapshot,
+    pub succeeded: Vec<String>,
+    pub failed: Vec<BatchFailure>,
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditData {
@@ -81,6 +90,21 @@ fn editable(view: &CipherView) -> Result<(), String> {
     }
     kind_fields(view.r#type)?;
     Ok(())
+}
+fn set_folder_preserving_item(
+    view: &mut CipherView,
+    folder: Option<FolderId>,
+) -> Result<bool, String> {
+    editable(view)?;
+    if view.deleted_date.is_some() {
+        return Err("Restore this item before moving it.".into());
+    }
+    if view.reprompt != CipherRepromptType::None {
+        return Err("This item requires a master-password reprompt.".into());
+    }
+    let changed = view.folder_id != folder;
+    view.folder_id = folder;
+    Ok(changed)
 }
 fn apply_patch(view: &mut CipherView, input: &ItemPatch) -> Result<(), String> {
     if let Some(kind) = &input.kind
@@ -295,7 +319,7 @@ impl VaultService {
             id: Some(id),
         })
     }
-    pub async fn item_action(&self, id: &str, action: &str) -> Result<Mutation, String> {
+    async fn apply_item_action(&self, id: &str, action: &str) -> Result<Option<String>, String> {
         let session = self.session.as_ref().ok_or_else(locked)?;
         let mut view = self.decrypt_one(id).await?;
         editable(&view)?;
@@ -345,16 +369,122 @@ impl VaultService {
                     _ => unreachable!(),
                 }
                 let id = submit(session, view, action == "clone").await?;
-                return Ok(Mutation {
-                    snapshot: self.refresh().await?,
-                    id: Some(id),
-                });
+                return Ok(Some(id));
             }
             _ => return Err("This action is not valid for the item's current state.".into()),
         }
+        Ok((action == "restore").then(|| id.to_owned()))
+    }
+    pub async fn item_action(&self, id: &str, action: &str) -> Result<Mutation, String> {
+        let id = self.apply_item_action(id, action).await?;
         Ok(Mutation {
             snapshot: self.refresh().await?,
-            id: (action == "restore").then(|| id.to_owned()),
+            id,
+        })
+    }
+    pub async fn batch_action(
+        &self,
+        ids: Vec<String>,
+        action: &str,
+    ) -> Result<BatchMutation, String> {
+        self.session.as_ref().ok_or_else(locked)?;
+        if !matches!(
+            action,
+            "favorite" | "unfavorite" | "archive" | "unarchive" | "trash" | "restore" | "purge"
+        ) {
+            return Err("Unsupported bulk action.".into());
+        }
+        let ids: std::collections::BTreeSet<_> = ids.into_iter().collect();
+        if ids.is_empty() || ids.len() > 500 {
+            return Err("Select between 1 and 500 items.".into());
+        }
+        // Check ownership/reprompt/read-only guards before any server mutation.
+        for id in &ids {
+            editable(&self.decrypt_one(id).await?)?;
+        }
+        let mut succeeded = Vec::new();
+        let mut failed = Vec::new();
+        for id in ids {
+            match self.apply_item_action(&id, action).await {
+                Ok(_) => succeeded.push(id),
+                Err(message) => failed.push(BatchFailure { id, message }),
+            }
+        }
+        let snapshot = self.refresh().await.map_err(|error| {
+            format!(
+                "{} items updated, {} failed; refresh failed: {error}. Sync before retrying.",
+                succeeded.len(),
+                failed.len()
+            )
+        })?;
+        Ok(BatchMutation {
+            snapshot,
+            succeeded,
+            failed,
+        })
+    }
+    pub async fn move_to_folder(
+        &self,
+        ids: Vec<String>,
+        folder_id: Option<&str>,
+    ) -> Result<BatchMutation, String> {
+        let session = self.session.as_ref().ok_or_else(locked)?;
+        touch(session);
+        let ids: std::collections::BTreeSet<_> = ids.into_iter().collect();
+        if ids.is_empty() || ids.len() > 500 {
+            return Err("Select between 1 and 500 items.".into());
+        }
+        let folder = folder_id
+            .filter(|id| !id.is_empty())
+            .map(str::parse::<FolderId>)
+            .transpose()
+            .map_err(|_| "Invalid destination folder.")?;
+        if let Some(folder) = folder {
+            let folders = session
+                .client
+                .0
+                .vault()
+                .folders()
+                .list()
+                .await
+                .map_err(|_| "Could not load folders.")?;
+            if !folders.iter().any(|entry| entry.id == Some(folder)) {
+                return Err(
+                    "The destination folder no longer exists. Sync and choose again.".into(),
+                );
+            }
+        }
+        // Preserve complete decrypted views and their revision dates. Validate all
+        // permissions before the first write; submit keeps revision preconditions.
+        let mut prepared = Vec::new();
+        for id in ids {
+            let mut view = self.decrypt_one(&id).await?;
+            let changed = set_folder_preserving_item(&mut view, folder)?;
+            prepared.push((id, view, changed));
+        }
+        let mut succeeded = Vec::new();
+        let mut failed = Vec::new();
+        for (id, view, changed) in prepared {
+            if !changed {
+                succeeded.push(id);
+                continue;
+            }
+            match submit(session, view, false).await {
+                Ok(_) => succeeded.push(id),
+                Err(message) => failed.push(BatchFailure { id, message }),
+            }
+        }
+        let snapshot = self.refresh().await.map_err(|error| {
+            format!(
+                "Moved {} items, {} failed; refresh failed: {error}. Sync before retrying.",
+                succeeded.len(),
+                failed.len()
+            )
+        })?;
+        Ok(BatchMutation {
+            snapshot,
+            succeeded,
+            failed,
         })
     }
     pub async fn folder_action(
@@ -435,6 +565,26 @@ mod tests {
         }
     }
     #[test]
+    fn folder_move_changes_only_folder_and_keeps_revision_and_all_payloads() {
+        let mut view = login();
+        let before = serde_json::to_value(&view).unwrap();
+        let folder: FolderId = "00000000-0000-4000-8000-000000000001".parse().unwrap();
+        assert!(set_folder_preserving_item(&mut view, Some(folder)).unwrap());
+        let after = serde_json::to_value(&view).unwrap();
+        for (key, value) in before.as_object().unwrap() {
+            if key != "folderId" {
+                assert_eq!(after.get(key), Some(value), "moving changed {key}");
+            }
+        }
+        assert!(!set_folder_preserving_item(&mut view, Some(folder)).unwrap());
+        assert!(set_folder_preserving_item(&mut view, None).unwrap());
+        view.deleted_date = Some(Utc::now());
+        assert!(set_folder_preserving_item(&mut view, Some(folder)).is_err());
+        view.deleted_date = None;
+        view.organization_id = Some("00000000-0000-4000-8000-000000000002".parse().unwrap());
+        assert!(set_folder_preserving_item(&mut view, Some(folder)).is_err());
+    }
+    #[test]
     fn name_patch_preserves_login_configuration_and_sensitive_fields() {
         let mut view = login();
         let original = view.login.clone();
@@ -481,5 +631,35 @@ mod tests {
                 .is_err()
         );
         assert!(service.edit_data("id").await.is_err());
+    }
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+    #[tokio::test]
+    async fn locked_bulk_actions_fail_before_network_or_partial_writes() {
+        let service = VaultService::default();
+        assert!(
+            service
+                .move_to_folder(vec!["synthetic-item".into()], None)
+                .await
+                .is_err()
+        );
+        for action in [
+            "trash",
+            "restore",
+            "purge",
+            "favorite",
+            "archive",
+            "unsupported",
+        ] {
+            assert!(
+                service
+                    .batch_action(vec!["synthetic-item".into()], action)
+                    .await
+                    .is_err()
+            );
+        }
     }
 }

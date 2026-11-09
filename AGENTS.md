@@ -9,3 +9,5 @@
 - 测试 cargo test --locked --workspace；静态检查 cargo clippy --locked --workspace --all-targets -- -D warnings；recipe python3 scripts/run-recipes.py。
 - TypeScript 依赖与运行统一使用 Bun；根目录 bun.lock 是唯一 JS 锁文件。bun install --frozen-lockfile、bun run check、bun run test；不引入 npm/pnpm/yarn 锁文件。
 - 提交使用 Conventional Commits；未经要求不提交、不推送。
+
+- 通用托盘、原生菜单、通知与窗口后台生命周期使用 plico-desktop 的公共接口；能力缺口先在 Plico 完善，不在应用重复引入 tray-icon、notify-rust、zbus 或绕过桌面入口。品牌资源、SSH 审批、密码库锁定与偏好持久化留在本应用，保持许可证边界。

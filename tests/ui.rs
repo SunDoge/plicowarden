@@ -110,7 +110,7 @@ fn login_is_centered_and_vault_columns_match_the_csharp_reference() {
         let signin = snapshot
             .exposed_nodes()
             .into_iter()
-            .find(|n| n.label.as_deref() == Some("Sign in"))
+            .find(|n| n.label.as_deref() == Some("Continue"))
             .unwrap();
         assert!(((signin.bounds[0] + signin.bounds[2]) * 0.5 - width as f32 * 0.5).abs() < 1.0);
         assert!(signin.bounds[0] >= 24. && signin.bounds[2] <= width as f32 - 24.);
@@ -211,4 +211,78 @@ fn interface_scale_setting_changes_the_host_controller_and_resets() {
         ui.source.view.0.zoom.factor(),
         plicowarden::appearance::Appearance::default().ui_scale
     );
+}
+
+#[test]
+fn login_steps_preserve_email_clear_password_and_keep_server_choices() {
+    let mut ui = Driver::new(
+        NativeApp(
+            PreviewConfig {
+                screen: "login".into(),
+                ..Default::default()
+            }
+            .app(),
+        ),
+        820,
+        640,
+    )
+    .unwrap();
+    text(&mut ui, "Email address", "bad-address");
+    click(&mut ui, "Continue");
+    assert!(!ui.source.view.0.login_password_step);
+    assert!(!ui.source.view.0.error.is_empty());
+    ui.source.view.0.email = "person@example.invalid".into();
+    ui.source.request_rebuild();
+    ui.execute(Command::Snapshot).unwrap();
+    click(&mut ui, "Continue");
+    text(&mut ui, "Master password", "synthetic-secret");
+    click(&mut ui, "Back");
+    assert!(ui.source.view.0.password.is_empty());
+    assert_eq!(ui.source.view.0.email, "person@example.invalid");
+    click(&mut ui, "bitwarden.com");
+    click(&mut ui, "Self-hosted");
+    text(&mut ui, "Server URL", "https://vault.example.invalid");
+    click(&mut ui, "Done");
+    click(&mut ui, "Continue");
+    assert_eq!(ui.source.view.0.region, "self-hosted");
+    assert_eq!(ui.source.view.0.server, "https://vault.example.invalid");
+}
+
+#[test]
+fn supported_window_sizes_show_navigation_items_and_details_by_default() {
+    for (width, height) in [(1440, 1000), (1224, 850), (1000, 720), (820, 640)] {
+        let ui = Driver::new(NativeApp(Warden::default()), width, height).unwrap();
+        let snapshot = ui.snapshot();
+        let nodes = snapshot.exposed_nodes();
+        let nav = nodes
+            .iter()
+            .find(|n| {
+                n.label.as_deref() == Some("All Items")
+                    && n.role == plico_renderer::SemanticRole::Button
+            })
+            .unwrap();
+        let item = nodes
+            .iter()
+            .find(|n| n.label.as_deref() == Some("Select GitHub"))
+            .unwrap();
+        let details = nodes
+            .iter()
+            .find(|n| {
+                n.label.as_deref() == Some("Copy username")
+                    && n.role == plico_renderer::SemanticRole::Button
+            })
+            .unwrap();
+        assert!(
+            nav.bounds[2] <= item.bounds[0],
+            "navigation and list overlap at {width}"
+        );
+        assert!(
+            item.bounds[2] < details.bounds[0],
+            "list and details overlap at {width}"
+        );
+        assert!(
+            details.bounds[2] <= width as f32,
+            "details overflow at {width}"
+        );
+    }
 }

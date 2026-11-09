@@ -45,6 +45,16 @@ impl Appearance {
         }
     }
 
+    /// Denser frost for text-heavy overlays; retains the shared framework shader.
+    pub fn dialog_material(&self) -> plico::LiquidGlass {
+        plico::LiquidGlass {
+            frost: (self.frost as f32).max(0.86),
+            tint_opacity: (self.tint as f32).max(0.72),
+            bevel: 18.,
+            ..self.material()
+        }
+    }
+
     pub fn path() -> Option<PathBuf> {
         directories::ProjectDirs::from("", "", "Plicowarden")
             .map(|d| d.data_local_dir().join("appearance.json"))

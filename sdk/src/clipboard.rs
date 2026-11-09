@@ -1,21 +1,27 @@
 //! Clipboard ownership and conditional expiry stay outside the GUI/render thread.
 use std::{
-    sync::mpsc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     time::{Duration, Instant},
 };
 use tokio::sync::oneshot;
 use zeroize::Zeroizing;
-const LIFETIME: Duration = Duration::from_secs(30);
 enum Request {
     Set(Zeroizing<String>, oneshot::Sender<Result<(), String>>),
     Clear,
 }
 pub struct ClipboardService {
     sender: mpsc::SyncSender<Request>,
+    lifetime: Arc<AtomicU64>,
 }
 impl ClipboardService {
-    pub fn new() -> Self {
+    pub fn new(lifetime: Duration) -> Self {
         let (sender, receiver) = mpsc::sync_channel(8);
+        let lifetime = Arc::new(AtomicU64::new(lifetime.as_secs().clamp(10, 120)));
+        let worker_lifetime = lifetime.clone();
         std::thread::spawn(move || {
             let mut clipboard = arboard::Clipboard::new().ok();
             let mut owned: Option<(Zeroizing<String>, Instant)> = None;
@@ -45,15 +51,18 @@ impl ClipboardService {
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {}
                 }
-                if owned
-                    .as_ref()
-                    .is_some_and(|(_, at)| at.elapsed() >= LIFETIME)
-                {
+                if owned.as_ref().is_some_and(|(_, at)| {
+                    at.elapsed() >= Duration::from_secs(worker_lifetime.load(Ordering::Relaxed))
+                }) {
                     clear_owned(&mut clipboard, &mut owned);
                 }
             }
         });
-        Self { sender }
+        Self { sender, lifetime }
+    }
+    pub fn set_lifetime(&self, seconds: u32) {
+        self.lifetime
+            .store(u64::from(seconds.clamp(10, 120)), Ordering::Relaxed);
     }
     pub async fn copy(&self, text: Zeroizing<String>) -> Result<(), String> {
         let (send, receive) = oneshot::channel();

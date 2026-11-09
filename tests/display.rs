@@ -91,8 +91,8 @@ fn compact_controls_keep_logical_size_and_hit_targets_at_retina_density() {
 fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     assert_eq!(display::default_scale(true), 0.85);
     assert_eq!(display::default_scale(false), 1.);
-    assert!(display::window_options(true).titlebar_overlay);
-    assert!(!display::window_options(false).titlebar_overlay);
+    assert!(!display::window_options(true).decorations);
+    assert!(!display::window_options(false).decorations);
     assert_eq!(
         display::window_options(true).initial_inner_size,
         (1224, 850)
@@ -112,7 +112,7 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
 }
 
 #[test]
-fn titlebar_controls_clear_the_native_traffic_light_area_at_different_zoom_levels() {
+fn custom_titlebar_controls_keep_point_size_and_clear_content_at_different_zoom_levels() {
     use plico_renderer::SemanticRole;
     for (width, height, factor, sidebar) in [
         (1224, 850, 0.85, true),
@@ -121,7 +121,7 @@ fn titlebar_controls_clear_the_native_traffic_light_area_at_different_zoom_level
         (1224, 850, 1.5, false),
     ] {
         let mut app = Warden::default();
-        app.native_titlebar = true;
+        app.custom_titlebar = true;
         app.sidebar = sidebar;
         app.zoom.set(factor);
         let zoom = app.zoom.clone();
@@ -132,10 +132,23 @@ fn titlebar_controls_clear_the_native_traffic_light_area_at_different_zoom_level
         for node in &source.semantic_snapshot().unwrap().nodes {
             if matches!(node.role, SemanticRole::Button | SemanticRole::TextInput) && !node.disabled
             {
+                if matches!(
+                    node.label.as_deref(),
+                    Some("Close window" | "Minimize window" | "Maximize or restore window")
+                ) {
+                    assert!(
+                        (node.bounds[2] - node.bounds[0] - 20.).abs() <= 1.5,
+                        "{:?} at {factor}: {:?}",
+                        node.label,
+                        node.bounds
+                    );
+                    assert!((node.bounds[3] - node.bounds[1] - 24.).abs() < 1.);
+                    continue;
+                }
                 let [x0, y0, x1, y1] = node.bounds;
                 assert!(
-                    !(x0 < 88. && x1 > 0. && y0 < 28. && y1 > 0.),
-                    "native controls overlap {:?} at {factor}",
+                    !(x0 < 88. && x1 > 0. && y0 < 56. && y1 > 0.),
+                    "window controls overlap {:?} at {factor}",
                     node.label
                 );
             }
