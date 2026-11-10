@@ -118,6 +118,40 @@ impl Warden {
         let width = (ui.viewport_width() - 48.).clamp(240., 432.);
         let top = if ui.viewport_size()[1] < 760. { 32 } else { 64 };
         let focus = std::mem::take(&mut self.login_focus);
+        // Login identity persists across launches (the host's persisted
+        // state file): the remembered email, the chosen region and the
+        // self-hosted server URL with its endpoint overrides. The secret
+        // never persists - only what the user would retype anyway.
+        if !self.authenticated && !self.login_password_step {
+            let remembered_email = ui.persisted_state("login.email", String::new);
+            if self.email.is_empty() {
+                self.email = remembered_email.read().clone();
+            }
+            let region = ui.persisted_state("login.region", || "us".to_owned());
+            if self.region == "us" {
+                self.region = region.read().clone();
+            }
+            let server = ui.persisted_state("login.server", String::new);
+            if self.server.is_empty() {
+                self.server = server.read().clone();
+            }
+            let advanced_urls = ui.persisted_state("login.endpoints", || {
+                (String::new(), String::new(), String::new())
+            });
+            if self.api_url.is_empty() && self.identity_url.is_empty() && self.icons_url.is_empty() {
+                (self.api_url, self.identity_url, self.icons_url) = advanced_urls.read().clone();
+            }
+            // Write back what the user changed this frame; set() only settles
+            // the frame when a value actually differs.
+            remembered_email.set(self.email.clone());
+            region.set(self.region.clone());
+            server.set(self.server.clone());
+            advanced_urls.set((
+                self.api_url.clone(),
+                self.identity_url.clone(),
+                self.icons_url.clone(),
+            ));
+        }
         column(ui).width_percent(100.).height_percent(100.).align(Align::Center).padding(24).padding_top(top).gap(24)
             .scroll_y(true) + |ui|
         {

@@ -51,13 +51,24 @@ fn main() -> Result<(), Error> {
     let (desktop, tray) = plicowarden::desktop::integration();
     let host = Host::new(Warden::default(), true).with_desktop(desktop);
     let zoom = host.app.zoom.clone();
+    // The engine's persisted-state file (login email, region, self-hosted
+    // server) under the same data directory as the appearance settings.
+    let persisted = directories::ProjectDirs::from("", "", "Plicowarden").map(|d| {
+        plico_desktop::PersistedStatePersistence::new(
+            d.data_local_dir().join("persisted-state.plico"),
+        )
+    });
+    let mut extensions: Vec<Box<dyn plico_desktop::ShellExtension>> = vec![Box::new(tray)];
+    if let Some(extension) = persisted {
+        extensions.push(Box::new(extension));
+    }
     plico_desktop::run_source_with_extensions(
         plico_runtime::ZoomSource::with_controller(
             Box::new(plico_runtime::Source::new(host)),
             zoom,
         ),
         plicowarden::display::window_options(cfg!(target_os = "macos")),
-        vec![Box::new(tray)],
+        extensions,
     )
     .map(|_| ())
     .context(DesktopSnafu)

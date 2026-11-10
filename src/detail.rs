@@ -177,8 +177,34 @@ impl Warden {
                 };
             };
         };
+        // While details round-trip, keep the pane's shape: same-sized
+        // placeholder cards pulse in place of the real fields (MyGO's
+        // skeleton placeholder), so switching items never collapses and
+        // re-expands the layout. Screen readers get one Loading status.
         if self.busy {
-            text(ui, "Reading vault…").color(MUTED);
+            let pulse = ui.loop_progress("detail-pulse", std::time::Duration::from_millis(1200),
+                plico::Easing::EaseInOut);
+            let shade = 0.55 + 0.45 * pulse;
+            let bone = |ui: &mut UiContext, label: &str| {
+                let _ = label;
+                row(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
+                    column(ui).width(0.).grow(1.).gap(8) + |ui| {
+                        column(ui).height(15.).width_percent(72.).radius(4.)
+                            .background(Color::Literal(0xd4d4d8)).background_alpha(shade);
+                        column(ui).height(13.).width_percent(45.).radius(4.)
+                            .background(Color::Literal(0xe4e4e7)).background_alpha(shade);
+                    };
+                };
+            };
+            surface(ui).padding(20).gap(10) + |ui| {
+                text(ui, "Loading details").font_size(13).color(MUTED);
+                bone(ui, "username");
+            };
+            surface(ui).padding(18).gap(12) + |ui| {
+                text(ui, "Loading fields").font_size(13).color(MUTED);
+                bone(ui, "password");
+                bone(ui, "totp");
+            };
         }
         if let Some(detail) = &details {
             if let Some(username) = detail.username.as_deref().filter(|s| !s.is_empty()) {

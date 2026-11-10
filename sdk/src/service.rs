@@ -105,7 +105,7 @@ pub struct VaultSnapshot {
     pub decrypt_failures: usize,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDetails {
     pub id: String,

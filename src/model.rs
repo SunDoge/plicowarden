@@ -1,7 +1,7 @@
 use crate::{appearance::Appearance, generator};
 use plico::{ModalState, TextBuffer};
 use plicowarden_sdk::{Reply, Request, service::*};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Clone)]
@@ -318,6 +318,10 @@ pub struct Warden {
     pub account_email: String,
     pub folders: Vec<VaultFolder>,
     pub details: Option<ItemDetails>,
+    /// Per-item detail cache (MyGO retains what a view painted): switching
+    /// back to an item shows its last details immediately while the refresh
+    /// round-trips; the busy state still gates the sensitive actions.
+    pub detail_cache: HashMap<String, ItemDetails>,
     pub shown_password: Option<Zeroizing<String>>,
     pub code: Option<TotpCode>,
     pub editor: Option<Editor>,
@@ -398,6 +402,7 @@ impl Default for Warden {
             account_email: String::new(),
             folders: Vec::new(),
             details: None,
+            detail_cache: HashMap::new(),
             shown_password: None,
             code: None,
             editor: None,
@@ -570,7 +575,10 @@ impl Warden {
             return;
         }
         self.selected = id.into();
-        self.details = None;
+        // MyGO retains what the view painted: switching serves the item's
+        // last details immediately (stale-while-revalidate) instead of
+        // collapsing the pane for the round-trip; the reply refreshes it.
+        self.details = self.detail_cache.get(id).cloned();
         self.shown_password = None;
         self.reveal = false;
         self.reveal_history = false;
@@ -612,6 +620,7 @@ impl Warden {
         self.ssh_modal.close();
         self.items.clear();
         self.folders.clear();
+        self.detail_cache.clear();
         self.details = None;
         self.shown_password = None;
         self.code = None;
@@ -773,7 +782,13 @@ impl Warden {
         self.password.clear();
         self.otp.clear();
         self.factors.clear();
-        self.details = None;
+        // A fresh sync may rename or remove items: keep cached details only
+        // for items that still exist (and invalidate the live slot when its
+        // item is gone, so the pane does not show a deleted item).
+        self.detail_cache
+            .retain(|id, _| self.items.iter().any(|i| &i.id == id));
+        let selected = self.selected.clone();
+        self.details = self.detail_cache.get(&selected).cloned();
         self.shown_password = None;
         self.reveal = false;
         self.reveal_history = false;
@@ -923,10 +938,15 @@ impl Warden {
                     }
                     self.history_ticket = None;
                 }
-                Reply::Details(details) => {
-                    if self.selected == details.id {
-                        self.details = Some(*details);
+                Reply::Details(boxed) => {
+                    if self.detail_cache.len() >= 512 {
+                        self.detail_cache.clear();
                     }
+                    let details = *boxed;
+                    if self.selected == details.id {
+                        self.details = Some(details.clone());
+                    }
+                    self.detail_cache.insert(details.id.clone(), details);
                 }
                 Reply::Revealed(password) => {
                     self.shown_password = Some(password);
