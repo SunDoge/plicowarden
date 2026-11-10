@@ -342,3 +342,80 @@ fn navigation_columns_have_equal_width_at_desktop_and_compact_sizes() {
         );
     }
 }
+
+#[test]
+fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failure() {
+    use plicowarden_sdk::{Event, Reply, service::LoginStage};
+    let app = PreviewConfig {
+        screen: "login".into(),
+        ..Default::default()
+    }
+    .app();
+    let mut ui = Driver::new(NativeApp(app), 1000, 720).unwrap();
+    ui.source.view.0.email = "recipe@example.invalid".into();
+    ui.source.view.0.login_password_step = true;
+    ui.source
+        .view
+        .0
+        .password
+        .edit(plico::InputEdit::Insert(zeroize::Zeroizing::new(
+            "synthetic-only".into(),
+        )));
+    ui.source.view.0.login();
+    let ticket = ui.source.view.0.pending.unwrap();
+    ui.execute(Command::Snapshot).unwrap();
+    assert!(
+        ui.snapshot()
+            .exposed_nodes()
+            .iter()
+            .any(|n| n.role == plico_renderer::SemanticRole::ProgressBar)
+    );
+    for stage in [
+        LoginStage::Authenticating,
+        LoginStage::Syncing,
+        LoginStage::Decrypting,
+    ] {
+        ui.source.view.0.apply(Event {
+            ticket,
+            result: Ok(Reply::LoginProgress(stage)),
+        });
+        assert!(ui.source.view.0.busy);
+        assert_eq!(ui.source.view.0.pending, Some(ticket));
+        assert_eq!(ui.source.view.0.login_stage, Some(stage));
+        ui.execute(Command::Snapshot).unwrap();
+        assert!(
+            ui.source
+                .adapter
+                .placed
+                .iter()
+                .any(|n| n.paint.text.as_deref() == Some(stage.label()))
+        );
+    }
+    ui.source.view.0.apply(Event {
+        ticket: ticket + 1,
+        result: Ok(Reply::LoginProgress(LoginStage::Authenticating)),
+    });
+    assert_eq!(ui.source.view.0.login_stage, Some(LoginStage::Decrypting));
+    ui.source.view.0.apply(Event {
+        ticket,
+        result: Err("Synthetic failure".into()),
+    });
+    assert!(!ui.source.view.0.busy);
+    assert!(ui.source.view.0.login_stage.is_none());
+    assert!(ui.source.view.0.error.contains("Unlocking vault"));
+    ui.source.view.0.apply(Event {
+        ticket: 0,
+        result: Ok(Reply::Locked),
+    });
+    assert!(
+        ui.source.view.0.error.contains("Synthetic failure"),
+        "the cleanup lock must preserve the login error"
+    );
+    ui.execute(Command::Snapshot).unwrap();
+    assert!(
+        !ui.snapshot()
+            .exposed_nodes()
+            .iter()
+            .any(|n| n.role == plico_renderer::SemanticRole::ProgressBar)
+    );
+}

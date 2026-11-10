@@ -11,7 +11,7 @@ listed separately. No real account or vault is used by the automated fixtures.
 | --- | --- | --- |
 | Vault navigation | Navigation, list and details default to three columns down to 820 logical px; explicit sidebar toggle retained | UI and viewport tests |
 | Search and filters | Text, type, favorites, folder, archive, trash and TOTP | Synthetic input/recipes |
-| Login | Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry | Synthetic replies and rejected configuration; no real login |
+| Login | Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry, animated busy indicator and worker-driven authentication/sync/unlock stages | Synthetic replies and rejected configuration; public Edgewarden SDK prelogin checked, no real account login |
 | Item operations | Personal login/card/identity/note/SSH create/edit, revision patches, favorites, clone, archive, trash, restore/purge | SDK guards and synthetic forms; organization items remain read-only |
 | Bulk actions | Multi-select/select all, favorite/unfavorite, archive/unarchive, trash, restore/purge, move to/from personal folders; destructive confirmation; per-item failures | SDK locked/ownership guards and UI command tests; no real server mutation |
 | Folders | Create/rename/delete, single/bulk move, folder/no-folder filtering | Existing SDK/UI paths |
@@ -68,3 +68,10 @@ this app does not claim byte-for-byte parity or full transient-memory erasure.
 
 The application is GPL-3.0-only. Framework effects remain in Plico; no official
 Angular application code was copied into the Apache-licensed framework.
+
+Login progress events retain their request ticket and do not finish the in-flight
+request. Late events from cancelled/older requests are ignored. The worker's
+90-second timeout still closes the session; its following lock event preserves
+the sign-in error rather than clearing it. Stage labels describe actual operation
+boundaries; authentication includes prelogin, key derivation and token exchange,
+with no fabricated percentage or per-request breakdown inside the pinned SDK.

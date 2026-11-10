@@ -78,6 +78,7 @@ pub enum Request {
 pub enum Reply {
     SecurityConfigured(security::SecuritySettings),
     Login(LoginOutcome),
+    LoginProgress(service::LoginStage),
     Snapshot(VaultSnapshot),
     Details(Box<ItemDetails>),
     Revealed(Zeroizing<String>),
@@ -229,6 +230,15 @@ impl Client {
                             Request::SshDecision { id, allow } => {
                                 broker.decide(id, allow, &service).await;
                                 Ok(Reply::SshClosed(id))
+                            }
+                            Request::Login { config, password } => {
+                                if config.email.trim().is_empty() || password.is_empty() {
+                                    Err("Enter your email and master password.".into())
+                                } else {
+                                    service.login_with_progress(config, password, |stage| {
+                                        notify(Event { ticket: work.ticket, result: Ok(Reply::LoginProgress(stage)) });
+                                    }).await.map(Reply::Login)
+                                }
                             }
                             request => execute(&mut service, request).await,
                         }

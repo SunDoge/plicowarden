@@ -63,6 +63,22 @@ pub enum TwoFactorProviderId {
     Webauthn,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoginStage {
+    Authenticating,
+    Syncing,
+    Decrypting,
+}
+impl LoginStage {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Authenticating => "Connecting and authenticating…",
+            Self::Syncing => "Downloading encrypted vault…",
+            Self::Decrypting => "Unlocking vault…",
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum LoginOutcome {
@@ -306,8 +322,18 @@ impl VaultService {
         request: LoginRequest,
         password: Zeroizing<String>,
     ) -> Result<LoginOutcome, String> {
+        self.login_with_progress(request, password, |_| {}).await
+    }
+
+    pub async fn login_with_progress(
+        &mut self,
+        request: LoginRequest,
+        password: Zeroizing<String>,
+        progress: impl Fn(LoginStage) + Send + Sync,
+    ) -> Result<LoginOutcome, String> {
         self.lock();
         let (settings, icon_base_url) = login_configuration(&request)?;
+        progress(LoginStage::Authenticating);
         let client = PasswordManagerClient::new(Some(settings));
         // SDK legacy decrypt silently replaces failed fields with null/empty.
         // A password client must report failures instead of showing damaged data.
@@ -342,7 +368,9 @@ impl VaultService {
             return Ok(LoginOutcome::TwoFactorRequired { providers: options });
         }
 
-        let snapshot = self.establish_session(email, client, icon_base_url).await?;
+        let snapshot = self
+            .establish_session(email, client, icon_base_url, &progress)
+            .await?;
         Ok(LoginOutcome::Authenticated { snapshot })
     }
 
@@ -392,7 +420,9 @@ impl VaultService {
         let client = pending.client;
         let icon_base_url = pending.icon_base_url;
         pending.password.zeroize();
-        let snapshot = self.establish_session(email, client, icon_base_url).await?;
+        let snapshot = self
+            .establish_session(email, client, icon_base_url, &|_| {})
+            .await?;
         Ok(LoginOutcome::Authenticated { snapshot })
     }
 
@@ -420,7 +450,9 @@ impl VaultService {
         email: String,
         client: PasswordManagerClient,
         icon_base_url: String,
+        progress: &(dyn Fn(LoginStage) + Sync),
     ) -> Result<VaultSnapshot, String> {
+        progress(LoginStage::Syncing);
         let sync = client.sync();
         let capture = Arc::new(CipherCapture::default());
         // Crypto handles user/account state. Organization keys are installed
@@ -445,6 +477,7 @@ impl VaultService {
             .await
             .map_err(|_| "The SDK rejected the synced user identity.".to_string())?;
 
+        progress(LoginStage::Decrypting);
         install_organization_keys(&client, &*capture.0.read().await).await?;
         self.session = Some(Session {
             email,

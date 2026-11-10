@@ -260,6 +260,20 @@ impl Warden {
                             self.request(Request::SendEmail);
                         }
                     }
+                    if self.busy {
+                        row(ui).width_percent(100.).gap(10).align(Align::Center) + |ui| {
+                            spinner(ui);
+                            text(
+                                ui,
+                                self.login_stage.map(|stage| stage.label())
+                                    .unwrap_or("Waiting for the account server…"),
+                            ).color(MUTED).font_size(13).width(0.).grow(1.);
+                        };
+                        if self.region == "self-hosted" {
+                            text(ui, &self.server).color(MUTED).font_size(12).width_percent(100.)
+                                .ellipsis(true);
+                        }
+                    }
                     if self.busy
                         && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                             .icon(crate::icons::get("close")).text("Cancel sign-in").ghost()

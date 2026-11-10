@@ -351,6 +351,7 @@ pub struct Warden {
     pub factors: Vec<TwoFactorOption>,
     pub factor: String,
     pub busy: bool,
+    pub login_stage: Option<plicowarden_sdk::service::LoginStage>,
     pub generated: Zeroizing<String>,
     pub history: VecDeque<Zeroizing<String>>,
     pub length: f64,
@@ -432,6 +433,7 @@ impl Default for Warden {
             factors: Vec::new(),
             factor: String::new(),
             busy: false,
+            login_stage: None,
             generated: Zeroizing::new(String::new()),
             history: VecDeque::new(),
             generator_mode: generator::Mode::Password,
@@ -564,6 +566,8 @@ impl Warden {
         self.ticket = self.ticket.wrapping_add(1);
         self.pending = Some(self.ticket);
         self.busy = true;
+        self.login_stage = matches!(&request, Request::Login { .. } | Request::TwoFactor(_))
+            .then_some(plicowarden_sdk::service::LoginStage::Authenticating);
         self.error.clear();
         self.commands.push(HostCommand::Account {
             ticket: self.ticket,
@@ -614,6 +618,7 @@ impl Warden {
         self.commands.push(HostCommand::Disconnect);
         self.pending = None;
         self.busy = false;
+        self.login_stage = None;
         self.authenticated = false;
         self.ssh_socket = None;
         self.ssh_approvals.clear();
@@ -822,8 +827,18 @@ impl Warden {
         }
 
         if matches!(&event.result, Ok(Reply::Locked)) {
+            // The worker reports a timeout error before its mandatory lock.
+            // Clearing that error here made failed sign-ins look like a silent reset.
+            let login_error = (self.login_open && !self.authenticated)
+                .then(|| std::mem::take(&mut self.error))
+                .filter(|error| !error.is_empty());
             self.lock();
-            self.notice = "Locked after inactivity or session expiry.".into();
+            if let Some(error) = login_error {
+                self.error = error;
+                self.notice = "Sign-in failed. Try again.".into();
+            } else {
+                self.notice = "Locked after inactivity or session expiry.".into();
+            }
             return;
         }
         if matches!(&event.result, Ok(Reply::SecurityConfigured(_))) {
@@ -866,15 +881,27 @@ impl Warden {
         if self.pending != Some(event.ticket) {
             return;
         }
+        if let Ok(Reply::LoginProgress(stage)) = &event.result {
+            self.login_stage = Some(*stage);
+            return;
+        }
         self.pending = None;
         self.busy = false;
+        let login_stage = self.login_stage.take();
         match event.result {
             Err(error) => {
-                self.error = error;
+                self.error = if let Some(stage) = login_stage {
+                    format!("{} {error}", stage.label())
+                } else {
+                    error
+                };
                 self.login_focus = self.login_open;
                 self.save_in_flight = false;
             }
             Ok(reply) => match reply {
+                Reply::LoginProgress(_) => {
+                    unreachable!("progress is handled without completing the request")
+                }
                 Reply::SecurityConfigured(_) => {}
                 Reply::Transfer(result) => {
                     if let Some(snapshot) = result.snapshot {
