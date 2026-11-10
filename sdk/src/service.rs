@@ -66,13 +66,23 @@ pub enum TwoFactorProviderId {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LoginStage {
+    UnlockingCache,
     Authenticating,
     Syncing,
     Decrypting,
 }
 impl LoginStage {
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::UnlockingCache => "Unlock local vault",
+            Self::Authenticating => "Authenticate account",
+            Self::Syncing => "Download encrypted vault",
+            Self::Decrypting => "Decrypt vault",
+        }
+    }
     pub fn label(self) -> &'static str {
         match self {
+            Self::UnlockingCache => "Unlocking local cache…",
             Self::Authenticating => "Connecting and authenticating…",
             Self::Syncing => "Downloading encrypted vault…",
             Self::Decrypting => "Unlocking vault…",
@@ -379,15 +389,14 @@ impl VaultService {
         let bypass_cache = std::mem::take(&mut self.bypass_cache_once);
         self.lock();
         let (settings, icon_base_url) = login_configuration(&request)?;
-        if !bypass_cache
-            && let Some(root) = &self.cache_root
-            && let Some((payload, unlock)) = crate::cache::load(root, &request, &password)?
-        {
-            progress(LoginStage::Decrypting);
-            return self
-                .restore_cached(payload, unlock, password)
-                .await
-                .map(|snapshot| LoginOutcome::Authenticated { snapshot });
+        if !bypass_cache && let Some(root) = &self.cache_root {
+            progress(LoginStage::UnlockingCache);
+            if let Some((payload, unlock)) = crate::cache::load(root, &request, &password)? {
+                return self
+                    .restore_cached(payload, unlock, password)
+                    .await
+                    .map(|snapshot| LoginOutcome::Authenticated { snapshot });
+            }
         }
         self.cache_config = Some(request.clone());
         progress(LoginStage::Authenticating);
@@ -437,6 +446,15 @@ impl VaultService {
         &mut self,
         request: TwoFactorSubmitRequest,
     ) -> Result<LoginOutcome, String> {
+        self.submit_two_factor_with_progress(request, |_| {}).await
+    }
+
+    pub async fn submit_two_factor_with_progress(
+        &mut self,
+        request: TwoFactorSubmitRequest,
+        progress: impl Fn(LoginStage) + Send + Sync,
+    ) -> Result<LoginOutcome, String> {
+        progress(LoginStage::Authenticating);
         let mut pending = self
             .pending_login
             .take()
@@ -480,7 +498,7 @@ impl VaultService {
         let icon_base_url = pending.icon_base_url;
         pending.password.zeroize();
         let snapshot = self
-            .establish_session(email, client, icon_base_url, &|_| {})
+            .establish_session(email, client, icon_base_url, &progress)
             .await?;
         Ok(LoginOutcome::Authenticated { snapshot })
     }

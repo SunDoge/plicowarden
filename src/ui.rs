@@ -233,6 +233,7 @@ impl Warden {
                             .transition(content_transition).enter_from(plico::Presentation {opacity:0.85,translate:[0.,3.],..Default::default()})
                             .gap(20).padding_y(1) + |ui|
                         {
+                            self.login_progress_ui(ui);
                             if self.settings_open {
                                 self.settings(ui);
                             } else if self.editor.is_some() {

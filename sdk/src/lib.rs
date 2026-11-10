@@ -92,6 +92,8 @@ pub enum Reply {
     Snapshot(VaultSnapshot),
     BackgroundSnapshot(VaultSnapshot),
     BackgroundSyncFailed(String),
+    BackgroundProgress(service::LoginStage),
+    BackgroundSyncPaused,
     SavedAccounts(Vec<cache::SavedAccount>),
     Details(Box<ItemDetails>),
     SearchResults {
@@ -236,9 +238,12 @@ impl Client {
                         result = async { (&mut background.as_mut().expect("background task is present").handle).await }, if background.is_some() => {
                             let ticket = background.take().expect("completed background task").ticket;
                             let result = match result {
-                                Ok(Ok(())) => match service.background_snapshot().await {
+                                Ok(Ok(())) => {
+                                    notify(Event {ticket:0,result:Ok(Reply::BackgroundProgress(service::LoginStage::Decrypting))});
+                                    match service.background_snapshot().await {
                                     Ok(snapshot) => Reply::BackgroundSnapshot(snapshot),
                                     Err(error) => Reply::BackgroundSyncFailed(error),
+                                    }
                                 },
                                 Ok(Err(error)) => Reply::BackgroundSyncFailed(error),
                                 Err(_) => Reply::BackgroundSyncFailed("Background synchronization was cancelled".into()),
@@ -261,7 +266,10 @@ impl Client {
                     if matches!(&work.request,Request::BackgroundSync) {
                         if background.is_none() {
                             match service.spawn_background_sync() {
-                                Ok(handle) => background=Some(BackgroundTask {ticket:work.ticket,handle}),
+                                Ok(handle) => {
+                                    background=Some(BackgroundTask {ticket:work.ticket,handle});
+                                    notify(Event {ticket:0,result:Ok(Reply::BackgroundProgress(service::LoginStage::Syncing))});
+                                },
                                 Err(error) => notify(Event {ticket:work.ticket,result:Ok(Reply::BackgroundSyncFailed(error))}),
                             }
                         }
@@ -274,6 +282,7 @@ impl Client {
                         Request::ConfigureSecurity(_)) {
                         // Give explicit synchronization and writes priority over a stale download.
                         cancel_background(&mut background).await;
+                        notify(Event {ticket:0,result:Ok(Reply::BackgroundSyncPaused)});
                     }
                     let force_online = matches!(&work.request, Request::Reconnect { .. });
                     let operation = async {
@@ -309,6 +318,9 @@ impl Client {
                                     }).await.map(Reply::Login)
                                 }
                             }
+                            Request::TwoFactor(request) => service.submit_two_factor_with_progress(request, |stage| {
+                                notify(Event {ticket:work.ticket,result:Ok(Reply::LoginProgress(stage))});
+                            }).await.map(Reply::Login),
                             request => execute(&mut service, request).await,
                         }
                     };

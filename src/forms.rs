@@ -261,19 +261,10 @@ impl Warden {
                             self.request(Request::SendEmail);
                         }
                     }
-                    if self.busy {
-                        row(ui).width_percent(100.).gap(10).align(Align::Center) + |ui| {
-                            spinner(ui);
-                            text(
-                                ui,
-                                self.login_stage.map(|stage| stage.label())
-                                    .unwrap_or("Waiting for the account server…"),
-                            ).color(MUTED).font_size(13).width(0.).grow(1.);
-                        };
-                        if self.region == "self-hosted" {
+                    self.login_progress_ui(ui);
+                    if self.busy && self.region == "self-hosted" {
                             text(ui, &self.server).color(MUTED).font_size(12).width_percent(100.)
                                 .ellipsis(true);
-                        }
                     }
                     if self.busy
                         && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
@@ -767,5 +758,43 @@ impl Warden {
             self.decide_ssh(approval.id, allow);
             ui.request_rebuild();
         }
+    }
+}
+
+impl Warden {
+    #[component]
+    #[rustfmt::skip]
+    pub fn login_progress_ui(&mut self, ui: &mut UiContext) {
+        use crate::login_progress::StepState;
+        if !self.login_progress.visible || self.login_progress.steps.is_empty() { return; }
+        let steps = self.login_progress.steps.clone();
+        column(ui).width_percent(100.).gap(10).padding(12).radius(8.).background(Color::Control) + |ui| {
+            row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                text(ui, "Connection progress").font_size(13).weight(600).width(0.).grow(1.);
+                if !self.login_open && button(ui).text("Hide progress").ghost().height(28.).clicked() {
+                    self.login_progress.visible = false;
+                }
+            };
+            for (index, step) in steps.into_iter().enumerate() {
+                ui.keyed(index as u64, |ui| {
+                let color = match step.state {
+                    StepState::Complete => Color::Literal(0x2e8650),
+                    StepState::Failed => Color::Danger,
+                    _ => MUTED,
+                };
+                row(ui).width_percent(100.).gap(10).align(Align::Center) + |ui| {
+                    if step.state == StepState::Loading { spinner(ui); }
+                    else { glyph(ui, if step.state == StepState::Complete { "check" } else if step.state == StepState::Failed { "close" } else { "clock" }, 16., color); }
+                    text(ui, if step.state == StepState::Loading {step.stage.label()} else {step.stage.title()})
+                        .font_size(13).color(color).width(0.).grow(1.);
+                    text(ui, match step.state {
+                        StepState::Pending => "Pending", StepState::Loading => "In progress",
+                        StepState::Complete => "Done", StepState::Failed => "Failed",
+                        StepState::Waiting => "Verification required", StepState::Paused => "Paused",
+                    }).font_size(12).color(color);
+                };
+                });
+            }
+        };
     }
 }

@@ -403,10 +403,28 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
     assert!(!ui.source.view.0.busy);
     assert!(ui.source.view.0.login_stage.is_none());
     assert!(ui.source.view.0.error.contains("Unlocking vault"));
+    use plicowarden::login_progress::StepState;
+    assert_eq!(
+        ui.source
+            .view
+            .0
+            .login_progress
+            .steps
+            .iter()
+            .map(|step| step.state)
+            .collect::<Vec<_>>(),
+        [StepState::Complete, StepState::Complete, StepState::Failed]
+    );
+
     ui.source.view.0.apply(Event {
         ticket: 0,
         result: Ok(Reply::Locked),
     });
+    assert_eq!(
+        ui.source.view.0.login_progress.steps[2].state,
+        StepState::Failed
+    );
+
     assert!(
         ui.source.view.0.error.contains("Synthetic failure"),
         "the cleanup lock must preserve the login error"

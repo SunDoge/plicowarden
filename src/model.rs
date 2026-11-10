@@ -365,6 +365,7 @@ pub struct Warden {
     pub factors: Vec<TwoFactorOption>,
     pub factor: String,
     pub busy: bool,
+    pub login_progress: crate::login_progress::LoginProgress,
     pub login_stage: Option<plicowarden_sdk::service::LoginStage>,
     pub generated: Zeroizing<String>,
     pub history: VecDeque<Zeroizing<String>>,
@@ -456,6 +457,7 @@ impl Default for Warden {
             factors: Vec::new(),
             factor: String::new(),
             busy: false,
+            login_progress: Default::default(),
             login_stage: None,
             generated: Zeroizing::new(String::new()),
             history: VecDeque::new(),
@@ -612,7 +614,7 @@ impl Warden {
         self.busy = !matches!(&request, Request::Details(_));
         self.login_stage = if matches!(&request, Request::Login { .. }) && self.has_cached_account()
         {
-            Some(plicowarden_sdk::service::LoginStage::Decrypting)
+            Some(plicowarden_sdk::service::LoginStage::UnlockingCache)
         } else {
             matches!(
                 &request,
@@ -620,6 +622,13 @@ impl Warden {
             )
             .then_some(plicowarden_sdk::service::LoginStage::Authenticating)
         };
+        if matches!(&request, Request::Login { .. } | Request::Reconnect { .. }) {
+            self.login_progress
+                .begin(matches!(&request, Request::Login { .. }) && self.has_cached_account());
+        } else if matches!(&request, Request::TwoFactor(_)) {
+            self.login_progress
+                .activate(plicowarden_sdk::service::LoginStage::Authenticating);
+        }
         if !matches!(&request, Request::Details(_)) {
             self.error.clear();
         }
@@ -701,6 +710,7 @@ impl Warden {
         self.pending = None;
         self.busy = false;
         self.login_stage = None;
+        self.login_progress = Default::default();
         self.authenticated = false;
         self.active_account_id = None;
         self.offline = false;
@@ -809,6 +819,7 @@ impl Warden {
         if !self.factors.is_empty() {
             self.commands.push(HostCommand::Disconnect);
         }
+        self.login_progress = Default::default();
         self.factors.clear();
         self.password.clear();
         self.otp.clear();
@@ -886,6 +897,8 @@ impl Warden {
         });
     }
     pub fn snapshot(&mut self, snapshot: VaultSnapshot) {
+        self.login_progress
+            .finish(snapshot.offline, snapshot.decrypt_failures);
         self.adding_account = false;
         self.deferred_snapshot = None;
         self.authenticated = true;
@@ -981,12 +994,23 @@ impl Warden {
             self.error = format!("Local search failed: {error}");
             return;
         }
+        if let Ok(Reply::BackgroundProgress(stage)) = &event.result {
+            if self.authenticated && !self.login_progress.steps.is_empty() {
+                self.login_progress.activate(*stage);
+            }
+            return;
+        }
+        if matches!(&event.result, Ok(Reply::BackgroundSyncPaused)) {
+            self.login_progress.pause();
+            return;
+        }
         let event = match event {
             plicowarden_sdk::Event {
                 result: Ok(Reply::BackgroundSyncFailed(error)),
                 ..
             } => {
                 if self.authenticated {
+                    self.login_progress.fail();
                     self.notice =
                         "Using the local vault. You can keep browsing while offline.".into();
                     self.record_error(format!("Background synchronization failed: {error}"));
@@ -1032,8 +1056,10 @@ impl Warden {
                 .then(|| std::mem::take(&mut self.error))
                 .filter(|error| !error.is_empty());
             let retry_password = login_error.as_ref().map(|_| self.password.take());
+            let progress = self.login_progress.clone();
             self.lock();
             if let Some(error) = login_error {
+                self.login_progress = progress;
                 if let Some(password) = retry_password {
                     self.password.set(password);
                     self.login_password_step = true;
@@ -1087,6 +1113,7 @@ impl Warden {
         }
         if let Ok(Reply::LoginProgress(stage)) = &event.result {
             self.login_stage = Some(*stage);
+            self.login_progress.activate(*stage);
             return;
         }
         self.pending = None;
@@ -1095,6 +1122,7 @@ impl Warden {
         match event.result {
             Err(error) => {
                 self.error = if let Some(stage) = login_stage {
+                    self.login_progress.fail();
                     format!("{} {error}", stage.label())
                 } else {
                     error
@@ -1151,6 +1179,7 @@ impl Warden {
                     }
                 }
                 Reply::Login(LoginOutcome::TwoFactorRequired { providers }) => {
+                    self.login_progress.verification();
                     self.factor = providers
                         .iter()
                         .find(|p| p.supported)
@@ -1223,7 +1252,10 @@ impl Warden {
                     self.notice = "Account removed from this device.".into();
                 }
                 Reply::SearchResults { .. } => unreachable!("search replies handled separately"),
-                Reply::BackgroundSnapshot(_) | Reply::BackgroundSyncFailed(_) => {
+                Reply::BackgroundSnapshot(_)
+                | Reply::BackgroundSyncFailed(_)
+                | Reply::BackgroundProgress(_)
+                | Reply::BackgroundSyncPaused => {
                     unreachable!("background replies handled separately")
                 }
                 Reply::Locked | Reply::TotpExpired(_) => {}

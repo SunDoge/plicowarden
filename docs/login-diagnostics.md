@@ -102,3 +102,12 @@ HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 NO_PROXY= \
 
 The port is an example from this machine; use the actual local proxy address.
 No system proxy setting is changed by this command.
+
+Connection progress is shown as individual authentication, encrypted download,
+and decryption steps. The active step spins; completed steps retain green checks.
+Failure marks the active step and leaves later steps pending, alongside the
+copyable error details. Two-step authentication waits for verification rather
+than reporting authentication success. A cached unlock displays its own step,
+then tracks the real background download and decryption. Progress remains visible
+in the vault after login and can be dismissed with Hide progress. Retrying starts
+a fresh attempt; timeout cleanup preserves the failed attempt for diagnosis.

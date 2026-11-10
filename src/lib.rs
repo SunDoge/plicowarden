@@ -8,6 +8,7 @@ mod forms;
 pub mod generator;
 pub mod host;
 mod icons;
+pub mod login_progress;
 pub mod model;
 pub mod security;
 pub mod transfer;
