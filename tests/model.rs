@@ -208,3 +208,100 @@ fn login_error_and_timeout_keep_secret_for_retry_but_explicit_lock_erases_it() {
     app.lock();
     assert!(app.password.is_empty());
 }
+
+fn remembered_account(server: &str) -> plicowarden_sdk::cache::SavedAccount {
+    let config = plicowarden_sdk::service::LoginRequest {
+        email: "same@example.invalid".into(),
+        region: "self-hosted".into(),
+        server_url: Some(server.into()),
+        server_config: None,
+    };
+    plicowarden_sdk::cache::SavedAccount {
+        id: plicowarden_sdk::cache::account_id(&config).unwrap(),
+        config,
+        cached_at: 123,
+    }
+}
+#[test]
+fn switching_accounts_clears_decrypted_state_and_restores_the_selected_server() {
+    let first = remembered_account("https://one.example.invalid");
+    let second = remembered_account("https://two.example.invalid");
+    let mut app = Warden::default();
+    app.saved_accounts = vec![first.clone(), second.clone()];
+    app.authenticated = true;
+    app.offline = true;
+    app.active_account_id = Some(first.id);
+    app.password
+        .set(Zeroizing::new("synthetic-previous-account-password".into()));
+    app.shown_password = Some(Zeroizing::new("synthetic-item-secret".into()));
+    app.search_matches = Some(["private-result".into()].into_iter().collect());
+    app.choose_account(&second);
+    assert!(!app.authenticated);
+    assert!(app.active_account_id.is_none());
+    assert!(app.items.is_empty() && app.details.is_none() && app.shown_password.is_none());
+    assert!(app.search_matches.is_none());
+    assert!(app.password.is_empty());
+    assert_eq!(app.server, "https://two.example.invalid");
+    assert!(app.has_cached_account() && app.login_password_step);
+    assert_eq!(app.saved_accounts.len(), 2);
+    app.add_account();
+    assert!(app.email.is_empty() && app.adding_account && !app.login_password_step);
+}
+#[test]
+fn stale_search_and_foreign_account_background_sync_cannot_replace_active_state() {
+    use plicowarden_sdk::service::VaultSnapshot;
+    let mut app = Warden::default();
+    app.authenticated = true;
+    app.account_email = "same@example.invalid".into();
+    app.active_account_id = Some("account-one".into());
+    let id = app.items[0].id.clone();
+    app.query = "notes-only-marker".into();
+    app.update_local_search();
+    let search_ticket = app.search_ticket.unwrap();
+    app.select("alarm");
+    let detail_ticket = app.pending;
+    app.apply(Event {
+        ticket: search_ticket,
+        result: Ok(Reply::SearchResults {
+            query: "notes-only-marker".into(),
+            ids: vec![id.clone()],
+        }),
+    });
+    assert_eq!(app.pending, detail_ticket);
+    assert!(!app.busy);
+    assert_eq!(
+        app.visible()
+            .iter()
+            .map(|item| &item.id)
+            .collect::<Vec<_>>(),
+        vec![&id]
+    );
+    app.apply(Event {
+        ticket: 0,
+        result: Ok(Reply::BackgroundSnapshot(VaultSnapshot {
+            email: app.account_email.clone(),
+            items: Vec::new(),
+            folders: Vec::new(),
+            decrypt_failures: 0,
+            offline: false,
+            account_id: Some("account-two".into()),
+            cache_warning: None,
+        })),
+    });
+    assert!(!app.items.is_empty());
+    app.apply(Event {
+        ticket: 0,
+        result: Ok(Reply::BackgroundSyncFailed(
+            "synthetic transport timeout".into(),
+        )),
+    });
+    assert!(app.authenticated);
+    assert_eq!(app.pending, detail_ticket);
+    assert!(
+        app.error.contains("synthetic transport timeout"),
+        "background diagnostics must use the copyable error surface"
+    );
+
+    app.lock();
+    assert!(app.search_matches.is_none() && app.search_ticket.is_none());
+}

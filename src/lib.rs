@@ -105,6 +105,24 @@ impl PreviewConfig {
             app.selected = selected.clone();
         }
         match self.screen.as_str() {
+            "accounts" => {
+                for server in ["https://one.example.invalid", "https://two.example.invalid"] {
+                    let config = plicowarden_sdk::service::LoginRequest {
+                        email: "same@example.invalid".into(),
+                        region: "self-hosted".into(),
+                        server_url: Some(server.into()),
+                        server_config: None,
+                    };
+                    app.saved_accounts
+                        .push(plicowarden_sdk::cache::SavedAccount {
+                            id: plicowarden_sdk::cache::account_id(&config)
+                                .expect("valid synthetic account"),
+                            config,
+                            cached_at: 123,
+                        });
+                }
+                app.accounts_modal.open();
+            }
             "ssh-approval" => {
                 // Synthetic preview only: no host/client, worker, socket or real key.
                 app.authenticated = true;

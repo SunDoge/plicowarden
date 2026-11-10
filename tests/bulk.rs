@@ -78,6 +78,9 @@ fn partial_bulk_results_keep_failed_ids_and_report_successes() {
                 message: "Synthetic permission failure".into(),
             }],
             snapshot: VaultSnapshot {
+                offline: false,
+                account_id: None,
+                cache_warning: None,
                 email: "recipe@example.invalid".into(),
                 folders: vec![],
                 decrypt_failures: 0,

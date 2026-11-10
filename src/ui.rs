@@ -105,10 +105,9 @@ fn nav(
     selected: bool,
     disabled: bool,
 ) -> bool {
-    (button_base(ui, label).width_percent(100.).height(39.).padding_x(12).padding_y(6).gap(10).radius(10.)
+    (plico::widgets::nav_entry(ui, label, selected).height(39.).padding_x(12).padding_y(6).gap(10).radius(10.)
         .corner_smoothing(1.).border(0., EDGE).justify(Justify::Start)
-        .background(if selected { Color::Literal(0xe8effe) } else { Color::Literal(0xffffff) })
-        .background_alpha(if selected { 1. } else { 0. }).disabled(disabled).opacity(if disabled { 0.45 } else { 1. })
+        .disabled(disabled).opacity(if disabled { 0.45 } else { 1. })
     + |ui|
     {
         glyph(ui, name, 18., ICON);
@@ -122,6 +121,8 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     pub fn show_ui(&mut self, ui: &mut UiContext) {
+        self.apply_deferred_snapshot();
+        self.update_local_search();
         let visible = self.visible();
         self.bulk_selected.retain(|id| visible.iter().any(|item| &item.id == id));
         if self.editor.is_none()
@@ -131,6 +132,8 @@ impl Warden {
         {
             self.select(&visible[0].id);
         }
+        let content_route = crate::model::business_key(if self.settings_open {"settings"} else if self.editor.is_some() {"editor"} else {self.filter.as_str()});
+        let content_transition = ui.theme().metrics.interaction_ms;
         let compact = ui.viewport_width() < 1120.;
         let navigation_width = if compact { 240. } else { 330. };
         let show_sidebar = self.sidebar && ui.viewport_width() >= 780.;
@@ -140,6 +143,7 @@ impl Warden {
         {
             if self.login_open {
                 self.account(ui);
+                self.accounts_ui(ui);
                 if self.custom_titlebar {
                     self.window_controls(ui);
                     let inset = (88. / self.zoom.factor()) as f32;
@@ -225,7 +229,8 @@ impl Warden {
                         if !self.settings_open {
                             self.item_list(ui, &visible, navigation_width);
                         }
-                        column(ui).width(0.).grow(1.).min_width(0.).height_percent(100.).scroll_y(true)
+                        column(ui).key(content_route).width(0.).grow(1.).min_width(0.).height_percent(100.).scroll_y(true)
+                            .transition(content_transition).enter_from(plico::Presentation {opacity:0.85,translate:[0.,3.],..Default::default()})
                             .gap(20).padding_y(1) + |ui|
                         {
                             if self.settings_open {
@@ -257,6 +262,7 @@ impl Warden {
                     };
                 };
             };
+            self.accounts_ui(ui);
             self.transfer_modal_ui(ui);
             self.move_dialog(ui);
             self.folder_manager(ui);
@@ -442,9 +448,10 @@ impl Warden {
                             ui,
                             if self.authenticated { &self.account_email } else { "alex@example.com" },
                         ).font_size(13).weight(600).width_percent(100.).ellipsis(true);
-                        text(ui, if self.authenticated { "Encrypted vault" } else { "Demo vault" }).font_size(12).color(MUTED).width_percent(100.);
+                        text(ui, if self.offline { "Cached vault" } else if self.authenticated { "Encrypted vault" } else { "Demo vault" }).font_size(12).color(MUTED).width_percent(100.);
                     };
                 };
+                if button(ui).text("Switch account").icon(crate::icons::get("login")).ghost().width_percent(100.).disabled(self.busy).clicked() {self.accounts_modal.open();}
             };
         };
     }

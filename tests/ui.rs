@@ -518,3 +518,39 @@ fn downloaded_site_icon_is_declared_as_an_image_in_list_and_details() {
             >= 2
     );
 }
+
+#[test]
+fn account_picker_distinguishes_identical_emails_on_different_servers_and_shows_local_unlock() {
+    let mut app = Warden::default();
+    for server in ["https://one.example.invalid", "https://two.example.invalid"] {
+        let config = plicowarden_sdk::service::LoginRequest {
+            email: "same@example.invalid".into(),
+            region: "self-hosted".into(),
+            server_url: Some(server.into()),
+            server_config: None,
+        };
+        app.saved_accounts
+            .push(plicowarden_sdk::cache::SavedAccount {
+                id: plicowarden_sdk::cache::account_id(&config).unwrap(),
+                config,
+                cached_at: 123,
+            });
+    }
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    click(&mut ui, "Switch account");
+    click(
+        &mut ui,
+        "Unlock account same@example.invalid on https://two.example.invalid",
+    );
+    assert_eq!(ui.source.view.0.server, "https://two.example.invalid");
+    assert!(ui.source.view.0.login_open && ui.source.view.0.login_password_step);
+    assert!(ui.source.view.0.password.is_empty());
+    assert!(ui.source.view.0.has_cached_account());
+    ui.advance(std::time::Duration::from_millis(250)).unwrap();
+    assert!(
+        ui.snapshot()
+            .exposed_nodes()
+            .iter()
+            .any(|node| node.label.as_deref() == Some("Unlock"))
+    );
+}

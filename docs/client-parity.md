@@ -11,8 +11,8 @@ authorized live sandbox check is recorded in `experiments/live-vault-validation.
 | Capability | Current behavior | Verification limit |
 | --- | --- | --- |
 | Vault navigation | Navigation, list and details default to three columns down to 820 logical px; explicit sidebar toggle retained | UI and viewport tests |
-| Search and filters | Text, type, favorites, folder, archive, trash and TOTP | Synthetic input/recipes |
-| Login | Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry, animated busy indicator and worker-driven authentication/sync/unlock stages | Synthetic replies/configuration; authorized Edgewarden account login via SDK and UI host, authenticator challenge/invalid-code/valid-code paths checked |
+| Search and filters | Active-account in-memory SQLite FTS5 for names/usernames/URIs/notes/text fields, plus type/favorites/folder/archive/trash/TOTP filters | Multi-term/CJK/literal matching and stale response tests; live cached-note search checked; advanced Lunr syntax pending |
+| Login | Saved-account local master-password unlock, account switching/add/remove, Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry, animated busy indicator and worker-driven authentication/sync/unlock stages | Synthetic replies/configuration; authorized Edgewarden account login via SDK and UI host, authenticator challenge/invalid-code/valid-code paths checked |
 | Item operations | Personal login/card/identity/note/SSH create/edit, revision patches, favorites, clone, archive, trash, restore/purge | SDK guards/synthetic forms; authorized live personal login/card/identity/SSH CRUD checked; note delete required cleanup after transport failure (see live validation); organization items remain read-only |
 | Bulk actions | Multi-select/select all, favorite/unfavorite, archive/unarchive, trash, restore/purge, move to/from personal folders; destructive confirmation; per-item failures | SDK locked/ownership guards and UI command tests; no real server mutation |
 | Folders | Create/rename/delete, single/bulk move, folder/no-folder filtering | Authorized live create/rename/delete and single-item move in/out; bulk/filter tests remain synthetic |
@@ -41,7 +41,7 @@ this app does not claim byte-for-byte parity or full transient-memory erasure.
 
 | Area | Missing capability |
 | --- | --- |
-| Account/session | Multiple accounts, offline encrypted cache, password/PIN/biometric unlock, timeout action choice, logout-vs-lock semantics |
+| Account/session | Simultaneously unlocked accounts, PIN/biometric unlock, timeout action choice, richer session/logout semantics |
 | Authentication | SSO, passkey/device login, WebAuthn/Duo native flows, recovery, registration, password hint/change and device approval |
 | Vault types | Bank account, passport and driver's license UI/mutations; richer URI matching and master-password reprompt |
 | Vault actions | Remaining official context actions; persistent sort/view preferences |
@@ -89,3 +89,6 @@ Site icon downloads use a separate host-owned worker (four concurrent requests,
 a bounded queue, up to 512 cached success/failure entries per session). Encoded
 images are capped at 128 KiB and 256×256 pixels. Failures retain the initial
 fallback and do not fail account operations; locking drops the loader/cache.
+
+Account caching, SQLite privacy boundaries, offline behavior and active-account search
+are detailed in `accounts-and-cache.md`. Switching accounts locks the previous one.

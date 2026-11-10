@@ -295,6 +295,9 @@ pub fn multiline_field(key: &str) -> bool {
 pub struct Warden {
     pub items: Vec<Item>,
     pub query: String,
+    pub search_ticket: Option<u64>,
+    pub search_submitted: String,
+    pub search_matches: Option<std::collections::HashSet<String>>,
     pub filter: String,
     pub selected: String,
     pub ascending: bool,
@@ -320,6 +323,12 @@ pub struct Warden {
     pub notice: String,
     pub error: String,
     pub authenticated: bool,
+    pub active_account_id: Option<String>,
+    pub adding_account: bool,
+    pub offline: bool,
+    pub deferred_snapshot: Option<Box<VaultSnapshot>>,
+    pub saved_accounts: Vec<plicowarden_sdk::cache::SavedAccount>,
+    pub accounts_modal: ModalState,
     pub account_email: String,
     pub folders: Vec<VaultFolder>,
     pub details: Option<ItemDetails>,
@@ -380,6 +389,9 @@ impl Default for Warden {
         Self {
             items: demo_items(),
             query: String::new(),
+            search_ticket: None,
+            search_submitted: String::new(),
+            search_matches: None,
             filter: "All Items".into(),
             selected: "github".into(),
             ascending: true,
@@ -405,6 +417,12 @@ impl Default for Warden {
             notice: String::new(),
             error: String::new(),
             authenticated: false,
+            active_account_id: None,
+            adding_account: false,
+            offline: false,
+            deferred_snapshot: None,
+            saved_accounts: Vec::new(),
+            accounts_modal: ModalState::default(),
             account_email: String::new(),
             folders: Vec::new(),
             details: None,
@@ -487,9 +505,30 @@ impl Warden {
                         "One-time Codes" => i.has_totp,
                         _ => true,
                     }
-                    && format!("{} {} {}", i.name, i.user, i.site)
-                        .to_lowercase()
-                        .contains(&query)
+                    && if self.authenticated
+                        && self.search_submitted == self.query
+                        && self.search_ticket.is_none()
+                        && !query.is_empty()
+                    {
+                        self.search_matches.as_ref().map_or_else(
+                            || {
+                                format!("{} {} {}", i.name, i.user, i.site)
+                                    .to_lowercase()
+                                    .contains(&query)
+                            },
+                            |ids| ids.contains(&i.id),
+                        )
+                    } else if self.authenticated
+                        && self.search_ticket.is_some()
+                        && !query.is_empty()
+                    {
+                        self.search_matches
+                            .as_ref()
+                            .is_none_or(|ids| ids.contains(&i.id))
+                    } else {
+                        let target = format!("{} {} {}", i.name, i.user, i.site).to_lowercase();
+                        query.split_whitespace().all(|part| target.contains(part))
+                    }
             })
             .cloned()
             .collect();
@@ -571,12 +610,50 @@ impl Warden {
         self.ticket = self.ticket.wrapping_add(1);
         self.pending = Some(self.ticket);
         self.busy = !matches!(&request, Request::Details(_));
-        self.login_stage = matches!(&request, Request::Login { .. } | Request::TwoFactor(_))
-            .then_some(plicowarden_sdk::service::LoginStage::Authenticating);
-        self.error.clear();
+        self.login_stage = if matches!(&request, Request::Login { .. }) && self.has_cached_account()
+        {
+            Some(plicowarden_sdk::service::LoginStage::Decrypting)
+        } else {
+            matches!(
+                &request,
+                Request::Login { .. } | Request::Reconnect { .. } | Request::TwoFactor(_)
+            )
+            .then_some(plicowarden_sdk::service::LoginStage::Authenticating)
+        };
+        if !matches!(&request, Request::Details(_)) {
+            self.error.clear();
+        }
         self.commands.push(HostCommand::Account {
             ticket: self.ticket,
             request: Box::new(request),
+        });
+    }
+    pub fn apply_deferred_snapshot(&mut self) {
+        if self.authenticated
+            && self.pending.is_none()
+            && self.editor.is_none()
+            && !self.busy
+            && let Some(snapshot) = self.deferred_snapshot.take()
+        {
+            self.snapshot(*snapshot);
+            self.notice = "Vault is up to date.".into();
+        }
+    }
+    pub fn update_local_search(&mut self) {
+        if !self.authenticated || self.busy || self.search_submitted == self.query {
+            return;
+        }
+        self.search_submitted = self.query.clone();
+        if self.query.trim().is_empty() {
+            self.search_matches = None;
+            self.search_ticket = None;
+            return;
+        }
+        self.ticket = self.ticket.wrapping_add(1);
+        self.search_ticket = Some(self.ticket);
+        self.commands.push(HostCommand::Account {
+            ticket: self.ticket,
+            request: Box::new(Request::Search(self.query.clone())),
         });
     }
     pub fn select(&mut self, id: &str) {
@@ -625,6 +702,10 @@ impl Warden {
         self.busy = false;
         self.login_stage = None;
         self.authenticated = false;
+        self.active_account_id = None;
+        self.offline = false;
+        self.deferred_snapshot = None;
+        self.accounts_modal.close();
         self.ssh_socket = None;
         self.ssh_approvals.clear();
         self.ssh_modal.close();
@@ -648,6 +729,9 @@ impl Warden {
         self.history.clear();
         self.generated.zeroize();
         self.query.clear();
+        self.search_ticket = None;
+        self.search_submitted.clear();
+        self.search_matches = None;
         self.selected.clear();
         self.reveal = false;
         self.reveal_history = false;
@@ -660,6 +744,7 @@ impl Warden {
         self.confirm_action = None;
         self.error.clear();
         self.notice = "Vault locked.".into();
+        self.login_password_step = self.has_cached_account();
     }
     pub fn validate_login_server(&mut self) -> bool {
         self.environment_error.clear();
@@ -733,17 +818,28 @@ impl Warden {
         self.error.clear();
         self.notice.clear();
     }
-    pub fn login(&mut self) {
-        if self.busy {
-            return;
-        }
-        if self.email.trim().is_empty() || self.password.is_empty() {
-            self.error = "Enter your email and master password.".into();
-            return;
-        }
-        self.commands.push(HostCommand::Disconnect);
-        self.factors.clear();
-        let config = LoginRequest {
+    pub fn choose_account(&mut self, account: &plicowarden_sdk::cache::SavedAccount) {
+        self.lock();
+        self.adding_account = false;
+        self.email = account.config.email.clone();
+        self.region = account.config.region.clone();
+        self.server = account.config.server_url.clone().unwrap_or_default();
+        let custom = account.config.server_config.clone().unwrap_or_default();
+        self.api_url = custom.api.unwrap_or_default();
+        self.identity_url = custom.identity.unwrap_or_default();
+        self.icons_url = custom.icons.unwrap_or_default();
+        self.login_password_step = true;
+        self.notice = "Unlock the locally cached vault with your master password.".into();
+    }
+    pub fn add_account(&mut self) {
+        self.lock();
+        self.adding_account = true;
+        self.email.clear();
+        self.login_password_step = false;
+        self.notice = "Connect another account.".into();
+    }
+    pub fn account_configuration(&self) -> LoginRequest {
+        LoginRequest {
             region: self.region.clone(),
             email: self.email.trim().into(),
             server_url: (self.region == "self-hosted").then(|| self.server.clone()),
@@ -755,16 +851,54 @@ impl Warden {
                     ..Default::default()
                 }
             }),
+        }
+    }
+    pub fn has_cached_account(&self) -> bool {
+        let Ok(id) = plicowarden_sdk::cache::account_id(&self.account_configuration()) else {
+            return false;
         };
-        self.request(Request::Login {
-            config,
-            password: self
-                .password
-                .with_value(|value| Zeroizing::new(value.to_owned())),
+        self.saved_accounts.iter().any(|account| account.id == id)
+    }
+    pub fn reconnect(&mut self) {
+        self.start_login(true);
+    }
+    pub fn login(&mut self) {
+        self.start_login(false);
+    }
+    fn start_login(&mut self, force_online: bool) {
+        if self.busy {
+            return;
+        }
+        if self.email.trim().is_empty() || self.password.is_empty() {
+            self.error = "Enter your email and master password.".into();
+            return;
+        }
+        self.commands.push(HostCommand::Disconnect);
+        self.factors.clear();
+        let config = self.account_configuration();
+        let password = self
+            .password
+            .with_value(|value| Zeroizing::new(value.to_owned()));
+        self.request(if force_online {
+            Request::Reconnect { config, password }
+        } else {
+            Request::Login { config, password }
         });
     }
     pub fn snapshot(&mut self, snapshot: VaultSnapshot) {
+        self.adding_account = false;
+        self.deferred_snapshot = None;
         self.authenticated = true;
+        self.offline = snapshot.offline;
+        self.active_account_id = snapshot.account_id;
+        self.search_ticket = None;
+        self.search_matches = None;
+        self.search_submitted.clear();
+        if let Some(warning) = snapshot.cache_warning {
+            self.record_error(format!("Local vault cache could not be updated: {warning}"));
+        } else if self.offline {
+            self.notice = "Unlocked local cache. Synchronizing in the background…".into();
+        }
         self.account_email = snapshot.email;
         self.folders = snapshot.folders;
         self.items = snapshot
@@ -823,7 +957,63 @@ impl Warden {
             self.request(Request::Details(self.selected.clone()));
         }
     }
+    fn record_error(&mut self, message: String) {
+        if !self.error.contains(&message) {
+            if !self.error.is_empty() {
+                self.error.push('\n');
+            }
+            self.error.push_str(&message);
+        }
+    }
     pub fn apply(&mut self, event: plicowarden_sdk::Event) {
+        if let Ok(Reply::SearchResults { query, ids }) = &event.result {
+            if self.search_ticket == Some(event.ticket) && query == &self.query {
+                self.search_ticket = None;
+                self.search_matches = Some(ids.iter().cloned().collect());
+            }
+            return;
+        }
+        if self.search_ticket == Some(event.ticket)
+            && let Err(error) = &event.result
+        {
+            self.search_ticket = None;
+            self.search_matches = None;
+            self.error = format!("Local search failed: {error}");
+            return;
+        }
+        let event = match event {
+            plicowarden_sdk::Event {
+                result: Ok(Reply::BackgroundSyncFailed(error)),
+                ..
+            } => {
+                if self.authenticated {
+                    self.notice =
+                        "Using the local vault. You can keep browsing while offline.".into();
+                    self.record_error(format!("Background synchronization failed: {error}"));
+                }
+                return;
+            }
+            plicowarden_sdk::Event {
+                result: Ok(Reply::BackgroundSnapshot(snapshot)),
+                ..
+            } => {
+                if self.authenticated
+                    && self.account_email == snapshot.email
+                    && self.active_account_id == snapshot.account_id
+                {
+                    if self.pending.is_none() && self.editor.is_none() {
+                        self.snapshot(snapshot);
+                        self.offline = false;
+                        self.notice = "Vault is up to date.".into();
+                    } else {
+                        self.deferred_snapshot = Some(Box::new(snapshot));
+                    }
+                }
+                return;
+            }
+            event => event,
+        };
+
         if let Ok(Reply::TotpExpired(expiry)) = &event.result {
             if self
                 .code
@@ -951,7 +1141,14 @@ impl Warden {
                 Reply::Login(LoginOutcome::Authenticated { snapshot }) => {
                     self.filter = "All Items".into();
                     self.query.clear();
+                    let cached = snapshot.offline;
                     self.snapshot(snapshot);
+                    if cached {
+                        self.commands.push(HostCommand::Account {
+                            ticket: 0,
+                            request: Box::new(Request::BackgroundSync),
+                        });
+                    }
                 }
                 Reply::Login(LoginOutcome::TwoFactorRequired { providers }) => {
                     self.factor = providers
@@ -1017,6 +1214,18 @@ impl Warden {
                     }
                 }
                 Reply::EmailSent => self.notice = "Verification email sent.".into(),
+                Reply::SavedAccounts(accounts) => {
+                    self.lock();
+                    self.saved_accounts = accounts;
+                    self.adding_account = true;
+                    self.email.clear();
+                    self.login_password_step = false;
+                    self.notice = "Account removed from this device.".into();
+                }
+                Reply::SearchResults { .. } => unreachable!("search replies handled separately"),
+                Reply::BackgroundSnapshot(_) | Reply::BackgroundSyncFailed(_) => {
+                    unreachable!("background replies handled separately")
+                }
                 Reply::Locked | Reply::TotpExpired(_) => {}
             },
         }

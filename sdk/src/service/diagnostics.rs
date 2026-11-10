@@ -6,10 +6,21 @@ fn enabled() -> bool {
     std::env::var_os("PLICOWARDEN_AUTH_TRACE").as_deref() == Some(std::ffi::OsStr::new("1"))
 }
 
+#[cfg(test)]
 pub(super) fn client(settings: ClientSettings) -> PasswordManagerClient {
+    client_with_state(
+        settings,
+        bitwarden_state::registry::StateRegistry::new_with_memory_db(),
+    )
+}
+pub(super) fn client_with_state(
+    settings: ClientSettings,
+    registry: bitwarden_state::registry::StateRegistry,
+) -> PasswordManagerClient {
     PasswordManagerClient(
         bitwarden_core::ClientBuilder::new()
             .with_settings(settings)
+            .with_state(registry)
             .with_token_handler(Arc::new(
                 bitwarden_auth::token_management::PasswordManagerTokenHandler::default(),
             ))

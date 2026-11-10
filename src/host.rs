@@ -75,6 +75,17 @@ impl Host {
                 }
             }
         }
+        if preferences && let Some(root) = plicowarden_sdk::cache::directory() {
+            match plicowarden_sdk::cache::accounts(&root) {
+                Ok(accounts) => {
+                    host.app.saved_accounts = accounts;
+                    if let Some(account) = host.app.saved_accounts.first().cloned() {
+                        host.app.choose_account(&account);
+                    }
+                }
+                Err(error) => host.app.notice = error,
+            }
+        }
         host.app.zoom.set(host.app.appearance.ui_scale);
         host
     }
@@ -94,7 +105,12 @@ impl Host {
             self.icon_pending.remove(&url);
             self.icon_cache.insert(
                 url,
-                bytes.map(|bytes| plico::ImageAsset::from_bytes(&bytes)),
+                bytes.map(|bytes| {
+                    let icon = plico::ImageAsset::from_bytes(&bytes);
+                    // Visible list/detail snapshots clone assets; share the first encoding.
+                    let _ = icon.encoded_str();
+                    icon
+                }),
             );
             changed = true;
         }
@@ -272,7 +288,19 @@ impl HostView for Host {
         }
         while let Some(event) = self.client.as_ref().and_then(Client::try_recv) {
             let previous = self.app.ssh_approvals.len();
+            let reload_accounts = matches!(
+                &event.result,
+                Ok(plicowarden_sdk::Reply::Login(_))
+                    | Ok(plicowarden_sdk::Reply::Snapshot(_))
+                    | Ok(plicowarden_sdk::Reply::BackgroundSnapshot(_))
+            );
             self.app.apply(event);
+            if reload_accounts
+                && let Some(root) = plicowarden_sdk::cache::directory()
+                && let Ok(accounts) = plicowarden_sdk::cache::accounts(&root)
+            {
+                self.app.saved_accounts = accounts;
+            }
             if self.app.ssh_approvals.len() > previous
                 && let Some(desktop) = &self.desktop
             {

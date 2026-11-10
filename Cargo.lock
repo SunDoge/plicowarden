@@ -5221,6 +5221,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plico"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5237,6 +5238,7 @@ dependencies = [
 [[package]]
 name = "plico-desktop"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "image",
  "peniko",
@@ -5245,7 +5247,7 @@ dependencies = [
  "plico-renderer",
  "plico-runtime",
  "plico-shell",
- "plico-wgpu 0.3.1",
+ "plico-wgpu",
  "pollster 1.0.1",
  "serde",
  "serde_json",
@@ -5255,6 +5257,7 @@ dependencies = [
 [[package]]
 name = "plico-dev"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5267,6 +5270,7 @@ dependencies = [
 [[package]]
 name = "plico-macros"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5277,6 +5281,7 @@ dependencies = [
 [[package]]
 name = "plico-motion"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "plico",
  "serde",
@@ -5287,28 +5292,7 @@ dependencies = [
 [[package]]
 name = "plico-native"
 version = "0.3.1"
-dependencies = [
- "cairo-rs",
- "lru",
- "objc2 0.6.5",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-text",
- "pango",
- "pangocairo",
- "snafu",
- "tempfile",
- "unicode-bidi",
- "windows",
- "windows-core",
- "yeslogic-fontconfig-sys",
-]
-
-[[package]]
-name = "plico-native"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=e13f29dce39aebd1272fa9053f03f2cff32fea2e#e13f29dce39aebd1272fa9053f03f2cff32fea2e"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "cairo-rs",
  "lru",
@@ -5330,6 +5314,7 @@ dependencies = [
 [[package]]
 name = "plico-renderer"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5359,6 +5344,7 @@ dependencies = [
 [[package]]
 name = "plico-runtime"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "elsa",
  "kurbo",
@@ -5381,6 +5367,7 @@ dependencies = [
 [[package]]
 name = "plico-shell"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5399,7 +5386,7 @@ dependencies = [
  "parley",
  "peniko",
  "plico-renderer",
- "plico-wgpu 0.3.1",
+ "plico-wgpu",
  "pollster 1.0.1",
  "raw-window-handle",
  "rfd",
@@ -5417,6 +5404,7 @@ dependencies = [
 [[package]]
 name = "plico-wgpu"
 version = "0.3.1"
+source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -5429,7 +5417,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-quartz-core 0.3.2",
  "peniko",
- "plico-native 0.3.1",
+ "plico-native",
  "plico-renderer",
  "pollster 1.0.1",
  "raw-window-handle",
@@ -5438,26 +5426,6 @@ dependencies = [
  "tracing",
  "wgpu",
  "winit",
-]
-
-[[package]]
-name = "plico-wgpu"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=e13f29dce39aebd1272fa9053f03f2cff32fea2e#e13f29dce39aebd1272fa9053f03f2cff32fea2e"
-dependencies = [
- "bytemuck",
- "kurbo",
- "libc",
- "lru",
- "naga",
- "peniko",
- "plico-native 0.3.1 (git+https://github.com/SunDoge/plico.git?rev=e13f29dce39aebd1272fa9053f03f2cff32fea2e)",
- "plico-renderer",
- "pollster 1.0.1",
- "resvg",
- "snafu",
- "tracing",
- "wgpu",
 ]
 
 [[package]]
@@ -5471,7 +5439,7 @@ dependencies = [
  "plico-dev",
  "plico-renderer",
  "plico-runtime",
- "plico-wgpu 0.3.1 (git+https://github.com/SunDoge/plico.git?rev=e13f29dce39aebd1272fa9053f03f2cff32fea2e)",
+ "plico-wgpu",
  "plicowarden-sdk",
  "pollster 1.0.1",
  "rfd",
@@ -5494,10 +5462,12 @@ dependencies = [
  "bitwarden-api-base",
  "bitwarden-auth",
  "bitwarden-core",
+ "bitwarden-crypto",
  "bitwarden-crypto-sync-handler",
  "bitwarden-exporters",
  "bitwarden-importers",
  "bitwarden-pm",
+ "bitwarden-state",
  "bitwarden-sync",
  "bitwarden-vault",
  "chrono",
@@ -5509,6 +5479,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "rsa 0.9.10",
+ "rusqlite",
  "rustix",
  "serde",
  "serde_json",

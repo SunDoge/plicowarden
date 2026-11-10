@@ -122,7 +122,7 @@ impl Warden {
         // state file): the remembered email, the chosen region and the
         // self-hosted server URL with its endpoint overrides. The secret
         // never persists - only what the user would retype anyway.
-        if !self.authenticated && !self.login_password_step {
+        if !self.authenticated && !self.login_password_step && !self.adding_account {
             let remembered_email = ui.persisted_state("login.email", String::new);
             if self.email.is_empty() {
                 self.email = remembered_email.read().clone();
@@ -208,12 +208,13 @@ impl Warden {
                             checkbox(ui, "Show master password", &mut self.login_show_password).disabled(self.busy);
                             if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("login"))
-                                .text(if self.busy { "Logging in…" } else { "Sign in" }).primary()
+                                .text(if self.busy { "Logging in…" } else if self.has_cached_account() {"Unlock"} else { "Sign in" }).primary()
                                 .height(42.).width_percent(100.)
                                 .disabled(self.busy || self.password.is_empty()).clicked()
                             {
                                 self.login();
                             }
+                            if (self.has_cached_account() || !self.error.is_empty()) && button(ui).text("Connect to server instead").ghost().width_percent(100.).disabled(self.busy || self.password.is_empty()).clicked() {self.reconnect();}
                         }
                     } else {
                         let previous = self.factor.clone();
@@ -368,6 +369,7 @@ impl Warden {
                         }
                     };
                 }
+                if !self.saved_accounts.is_empty() && button(ui).text("Switch account").ghost().width_percent(100.).disabled(self.busy).clicked() {self.accounts_modal.open();}
                 if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                     .icon(crate::icons::get("grid")).text("Browse demo vault").ghost().background_alpha(0.)
                     .width_percent(100.).disabled(self.busy).clicked()
@@ -381,6 +383,37 @@ impl Warden {
                 }
             };
         };
+    }
+    #[component]
+    #[rustfmt::skip]
+    pub fn accounts_ui(&mut self, ui: &mut UiContext) {
+        let mut state = std::mem::take(&mut self.accounts_modal);
+        modal(ui,&mut state).title("Accounts").width(520.).children(|ui| {
+            for account in self.saved_accounts.clone() {
+                let server = account.config.server_url.as_deref().unwrap_or(&account.config.region);
+                let label = format!("Unlock account {} on {}",account.config.email,server);
+                ui.keyed(crate::model::business_key(&account.id), |ui| {
+                row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                    if plico::widgets::nav_entry(ui, label, self.active_account_id.as_deref()==Some(account.id.as_str()))
+                        .width(0.).grow(1.).height(58.).disabled(self.busy).children(|ui| {
+                            column(ui).width_percent(100.).min_width(0.).gap(4) + |ui| {
+                                text(ui,&account.config.email).font_size(14).weight(600).color(INK).width_percent(100.).ellipsis(true);
+                                text(ui,server).font_size(12).color(MUTED).width_percent(100.).ellipsis(true);
+                            };
+                        }).response.clicked() {
+                        self.choose_account(&account);
+                        ui.close_modal();
+                    }
+                    if button(ui).icon(crate::icons::get("trash")).text("Forget").aria_label(format!("Forget account {} on {}",account.config.email,server)).ghost().disabled(self.busy).clicked() {
+                        self.request(Request::ForgetAccount(account.id.clone()));
+                        ui.close_modal();
+                    }
+                };
+                });
+            }
+            if button(ui).icon(crate::icons::get("plus")).text("Add account").width_percent(100.).disabled(self.busy).clicked() {self.add_account();ui.close_modal();}
+        });
+        self.accounts_modal = state;
     }
     #[component]
     #[rustfmt::skip]

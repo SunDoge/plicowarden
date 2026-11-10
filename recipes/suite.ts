@@ -23,7 +23,7 @@ export default suite([
   })),
   recipe("favorites", {
     state: demoVault(),
-    steps: [click(button("Favorites")), expect(buttonsStartingWith("Select ")).count(4), capture("favorites"),
+    steps: [click(button("Favorites")), expect(buttonsStartingWith("Select ")).count(4), capture("favorites-start"), advance(75), capture("favorites-transition"), advance(175), capture("favorites"),
       click(button("All Items")), expect(buttonsStartingWith("Select ")).count(12)],
   }),
   recipe("settings", {
@@ -51,6 +51,15 @@ export default suite([
       expectText("Connecting and authenticating… Synthetic account service is offline"),
       expect(button("Sign in")).enabled(), capture("rejected"),
       click(button("Browse demo vault")), expect(buttonsStartingWith("Select ")).count(12),
+    ],
+  }),
+  recipe("accounts", {
+    state: demoVault({ screen: "accounts" }),
+    steps: [advance(250), capture("switcher"),
+      click(button("Unlock account same@example.invalid on https://two.example.invalid")),
+      advance(250), expect(button("Unlock")).exists(), capture("local-unlock"),
+      click(button("Switch account")), advance(250), click(button("Add account")),
+      advance(250), expect(textbox("Email address")).value(""), capture("add-account"),
     ],
   }),
   recipe("editor", {

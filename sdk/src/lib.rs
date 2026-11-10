@@ -1,10 +1,12 @@
 //! GPL-3.0-only Warden application service. SDK sessions live only in this actor.
+pub mod cache;
 mod clipboard;
+pub mod icons;
 pub mod protected;
+mod search;
 pub mod security;
 pub mod server;
 pub mod service;
-pub mod icons;
 pub mod ssh_agent;
 pub use bitwarden_vault::{FieldType, FieldView};
 
@@ -26,15 +28,22 @@ pub enum Request {
         config: LoginRequest,
         password: Zeroizing<String>,
     },
+    Reconnect {
+        config: LoginRequest,
+        password: Zeroizing<String>,
+    },
     TwoFactor(TwoFactorSubmitRequest),
     SendEmail,
     Sync,
+    BackgroundSync,
+    ForgetAccount(String),
     SshAgent(bool),
     SshDecision {
         id: u64,
         allow: bool,
     },
     Details(String),
+    Search(String),
     Reveal(String),
     PasswordHistory(String),
     Totp(String),
@@ -81,7 +90,14 @@ pub enum Reply {
     Login(LoginOutcome),
     LoginProgress(service::LoginStage),
     Snapshot(VaultSnapshot),
+    BackgroundSnapshot(VaultSnapshot),
+    BackgroundSyncFailed(String),
+    SavedAccounts(Vec<cache::SavedAccount>),
     Details(Box<ItemDetails>),
+    SearchResults {
+        query: String,
+        ids: Vec<String>,
+    },
     Revealed(Zeroizing<String>),
     PasswordHistory {
         id: String,
@@ -126,6 +142,22 @@ impl Default for Client {
         Self::new()
     }
 }
+struct BackgroundTask {
+    ticket: u64,
+    handle: tokio::task::JoinHandle<Result<(), String>>,
+}
+impl Drop for BackgroundTask {
+    fn drop(&mut self) {
+        self.handle.abort();
+    }
+}
+async fn cancel_background(task: &mut Option<BackgroundTask>) {
+    if let Some(mut task) = task.take() {
+        task.handle.abort();
+        let _ = (&mut task.handle).await;
+    }
+}
+
 impl Client {
     pub fn new() -> Self {
         Self::with_security(Default::default())
@@ -162,14 +194,16 @@ impl Client {
                 }
             };
             runtime.block_on(async {
-                let mut service = VaultService::default();
+                let mut service = VaultService::default().with_account_cache(cache::directory());
                 service.configure_security(settings);
                 let mut broker = ssh_agent::Broker::new(access.clone());
                 let mut agent: Option<ssh_agent::RunningAgent> = None;
                 let mut interval = tokio::time::interval(Duration::from_secs(1));
                 let mut code_expiry: Option<i64> = None;
+                let mut background: Option<BackgroundTask> = None;
                 loop {
                     observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
+                    if service.is_locked() { cancel_background(&mut background).await; }
                     let work = tokio::select! { biased;
                         _ = closed.changed() => break,
                         _ = interval.tick() => {
@@ -199,9 +233,23 @@ impl Client {
                             }
                             continue;
                         },
+                        result = async { (&mut background.as_mut().expect("background task is present").handle).await }, if background.is_some() => {
+                            let ticket = background.take().expect("completed background task").ticket;
+                            let result = match result {
+                                Ok(Ok(())) => match service.background_snapshot().await {
+                                    Ok(snapshot) => Reply::BackgroundSnapshot(snapshot),
+                                    Err(error) => Reply::BackgroundSyncFailed(error),
+                                },
+                                Ok(Err(error)) => Reply::BackgroundSyncFailed(error),
+                                Err(_) => Reply::BackgroundSyncFailed("Background synchronization was cancelled".into()),
+                            };
+                            notify(Event {ticket,result:Ok(result)});
+                            continue;
+                        },
                         work = incoming.recv() => match work { Some(work) => work, None => break },
                     };
-                    if matches!(&work.request, Request::Login { .. } | Request::TwoFactor(_)) {
+                    if matches!(&work.request, Request::Login { .. } | Request::Reconnect {..} | Request::TwoFactor(_) | Request::ForgetAccount(_)) {
+                        cancel_background(&mut background).await;
                         stop_agent(&access, &mut agent, &mut broker, &notify);
                     }
                     observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
@@ -209,6 +257,25 @@ impl Client {
                         stop_agent(&access, &mut agent, &mut broker, &notify);
                         notify(Event { ticket: 0, result: Ok(Reply::Locked) });
                     }
+                    if service.is_locked() { cancel_background(&mut background).await; }
+                    if matches!(&work.request,Request::BackgroundSync) {
+                        if background.is_none() {
+                            match service.spawn_background_sync() {
+                                Ok(handle) => background=Some(BackgroundTask {ticket:work.ticket,handle}),
+                                Err(error) => notify(Event {ticket:work.ticket,result:Ok(Reply::BackgroundSyncFailed(error))}),
+                            }
+                        }
+                        continue;
+                    }
+                    if background.is_some() && !matches!(&work.request,
+                        Request::Details(_) | Request::Reveal(_) | Request::Search(_) |
+                        Request::PasswordHistory(_) | Request::Totp(_) | Request::CopyField {..} |
+                        Request::CopyText(_) | Request::SshDecision {..} | Request::SshAgent(_) |
+                        Request::ConfigureSecurity(_)) {
+                        // Give explicit synchronization and writes priority over a stale download.
+                        cancel_background(&mut background).await;
+                    }
+                    let force_online = matches!(&work.request, Request::Reconnect { .. });
                     let operation = async {
                         match work.request {
                             Request::SshAgent(enabled) => {
@@ -232,10 +299,11 @@ impl Client {
                                 broker.decide(id, allow, &service).await;
                                 Ok(Reply::SshClosed(id))
                             }
-                            Request::Login { config, password } => {
+                            Request::Login { config, password } | Request::Reconnect { config, password } => {
                                 if config.email.trim().is_empty() || password.is_empty() {
                                     Err("Enter your email and master password.".into())
                                 } else {
+                                    service.bypass_cache_once = force_online;
                                     service.login_with_progress(config, password, |stage| {
                                         notify(Event { ticket: work.ticket, result: Ok(Reply::LoginProgress(stage)) });
                                     }).await.map(Reply::Login)
@@ -254,6 +322,7 @@ impl Client {
                             notify(Event { ticket: work.ticket, result });
                         },
                         Err(_) => {
+                            cancel_background(&mut background).await;
                             service.lock();
                             stop_agent(&access, &mut agent, &mut broker, &notify);
                             notify(Event { ticket: work.ticket, result: Err("The request timed out. Connect to your account again.".into()) });
@@ -261,6 +330,7 @@ impl Client {
                         }
                     }
                 }
+                cancel_background(&mut background).await;
                 stop_agent(&access, &mut agent, &mut broker, &notify);
                 service.lock();
             });
@@ -308,6 +378,10 @@ async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, 
             service.configure_security(settings);
             Reply::SecurityConfigured(settings)
         }
+        Request::Reconnect { config, password } => {
+            service.bypass_cache_once = true;
+            Reply::Login(service.login(config, password).await?)
+        }
         Request::Login { config, password } => {
             if config.email.trim().is_empty() || password.is_empty() {
                 return Err("Enter your email and master password.".into());
@@ -323,6 +397,22 @@ async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, 
             return Err("SSH command must be handled by the account actor.".into());
         }
         Request::Sync => Reply::Snapshot(service.refresh().await?),
+        Request::BackgroundSync => match service.refresh().await {
+            Ok(snapshot) => Reply::BackgroundSnapshot(snapshot),
+            Err(error) => Reply::BackgroundSyncFailed(error),
+        },
+        Request::ForgetAccount(id) => {
+            if let Some(root) = cache::directory() {
+                cache::forget(&root, &id)?;
+                Reply::SavedAccounts(cache::accounts(&root)?)
+            } else {
+                return Err("Account data directory is unavailable".into());
+            }
+        }
+        Request::Search(query) => Reply::SearchResults {
+            ids: service.search(&query).await?,
+            query,
+        },
         Request::Details(id) => Reply::Details(Box::new(service.details(&id).await?)),
         Request::PasswordHistory(id) => Reply::PasswordHistory {
             entries: service.password_history(&id).await?,

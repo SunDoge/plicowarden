@@ -27,7 +27,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use zeroize::{Zeroize, Zeroizing};
 const DEFAULT_AUTO_LOCK_AFTER: Duration = Duration::from_secs(300);
-#[derive(Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
     pub region: String,
@@ -120,6 +120,9 @@ pub struct VaultSnapshot {
     pub items: Vec<VaultItem>,
     pub folders: Vec<VaultFolder>,
     pub decrypt_failures: usize,
+    pub offline: bool,
+    pub account_id: Option<String>,
+    pub cache_warning: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -262,10 +265,33 @@ impl SyncHandler for CipherCapture {
     }
 }
 
+struct CacheWriter {
+    root: std::path::PathBuf,
+    config: LoginRequest,
+    state: Arc<crate::cache::State>,
+    client: PasswordManagerClient,
+    warning: Arc<StdMutex<Option<String>>>,
+}
+#[async_trait]
+impl SyncHandler for CacheWriter {
+    async fn on_sync(&self, response: &SyncResponseModel) -> Result<(), SyncHandlerError> {
+        let result = crate::cache::save(
+            &self.root,
+            &self.config,
+            &self.client,
+            &self.state,
+            response,
+        )
+        .await;
+        *self.warning.lock().unwrap() = result.err();
+        Ok(())
+    }
+}
+
 struct Session {
     email: String,
     client: PasswordManagerClient,
-    sync: SyncClient,
+    sync: Arc<SyncClient>,
     capture: Arc<CipherCapture>,
     last_activity: StdMutex<Instant>,
     icon_base_url: String,
@@ -284,6 +310,13 @@ pub struct VaultService {
     pending_login: Option<PendingLogin>,
     auto_lock_after: Duration,
     clipboard_seconds: u32,
+    pub(crate) bypass_cache_once: bool,
+    search_index: StdMutex<Option<crate::search::SearchIndex>>,
+    cache_root: Option<std::path::PathBuf>,
+    cache_config: Option<LoginRequest>,
+    cache_state: Option<Arc<crate::cache::State>>,
+    cache_warning: Arc<StdMutex<Option<String>>>,
+    offline: std::sync::atomic::AtomicBool,
     clipboard: std::sync::OnceLock<crate::clipboard::ClipboardService>,
 }
 
@@ -294,12 +327,23 @@ impl Default for VaultService {
             pending_login: None,
             auto_lock_after: DEFAULT_AUTO_LOCK_AFTER,
             clipboard_seconds: 30,
+            bypass_cache_once: false,
+            search_index: StdMutex::new(None),
+            cache_root: None,
+            cache_config: None,
+            cache_state: None,
+            cache_warning: Arc::new(StdMutex::new(None)),
+            offline: std::sync::atomic::AtomicBool::new(false),
             clipboard: std::sync::OnceLock::new(),
         }
     }
 }
 
 impl VaultService {
+    pub fn with_account_cache(mut self, root: Option<std::path::PathBuf>) -> Self {
+        self.cache_root = root;
+        self
+    }
     pub fn configure_security(&mut self, settings: crate::security::SecuritySettings) {
         let settings = settings.validated();
         self.auto_lock_after = Duration::from_secs(u64::from(settings.auto_lock_minutes) * 60);
@@ -332,10 +376,24 @@ impl VaultService {
         password: Zeroizing<String>,
         progress: impl Fn(LoginStage) + Send + Sync,
     ) -> Result<LoginOutcome, String> {
+        let bypass_cache = std::mem::take(&mut self.bypass_cache_once);
         self.lock();
         let (settings, icon_base_url) = login_configuration(&request)?;
+        if !bypass_cache
+            && let Some(root) = &self.cache_root
+            && let Some((payload, unlock)) = crate::cache::load(root, &request, &password)?
+        {
+            progress(LoginStage::Decrypting);
+            return self
+                .restore_cached(payload, unlock, password)
+                .await
+                .map(|snapshot| LoginOutcome::Authenticated { snapshot });
+        }
+        self.cache_config = Some(request.clone());
         progress(LoginStage::Authenticating);
-        let client = diagnostics::client(settings);
+        let registry = bitwarden_state::registry::StateRegistry::new_with_memory_db();
+        self.cache_state = Some(Arc::new(crate::cache::State::new(&registry)));
+        let client = diagnostics::client_with_state(settings, registry);
         // SDK legacy decrypt silently replaces failed fields with null/empty.
         // A password client must report failures instead of showing damaged data.
         client
@@ -455,13 +513,24 @@ impl VaultService {
     ) -> Result<VaultSnapshot, String> {
         progress(LoginStage::Syncing);
         let sync_timing = diagnostics::Timing::new("initial_sync");
-        let sync = client.sync();
+        let sync = Arc::new(client.sync());
         let capture = Arc::new(CipherCapture::default());
         // Crypto handles user/account state. Organization keys are installed
         // explicitly below: this SDK handler does not initialize them.
         sync.register_sync_handler(Arc::new(CryptoSyncHandler::new(client.0.clone())));
         sync.register_sync_handler(Arc::new(FolderSyncHandler::from_client(&client.0)));
         sync.register_sync_handler(capture.clone());
+        if let (Some(root), Some(config), Some(state)) =
+            (&self.cache_root, &self.cache_config, &self.cache_state)
+        {
+            sync.register_sync_handler(Arc::new(CacheWriter {
+                root: root.clone(),
+                config: config.clone(),
+                state: state.clone(),
+                client: PasswordManagerClient(client.0.clone()),
+                warning: self.cache_warning.clone(),
+            }));
+        }
         sync.sync(SyncRequest {
             force: true,
             // Match the official desktop client: equivalent-domain data is
@@ -502,6 +571,123 @@ impl VaultService {
         self.snapshot().await
     }
 
+    async fn restore_cached(
+        &mut self,
+        payload: crate::cache::Payload,
+        unlock: bitwarden_core::key_management::MasterPasswordUnlockData,
+        password: Zeroizing<String>,
+    ) -> Result<VaultSnapshot, String> {
+        let (settings, icon_base_url) = login_configuration(&payload.account.config)?;
+        let registry = bitwarden_state::registry::StateRegistry::new_with_memory_db();
+        let state = Arc::new(crate::cache::State::new(&registry));
+        state.restore(&payload).await?;
+        let client = diagnostics::client_with_state(settings, registry);
+        client
+            .0
+            .flags()
+            .load(std::collections::HashMap::from([(
+                "strict-cipher-decryption".into(),
+                true,
+            )]))
+            .await;
+        let data = bitwarden_crypto_sync_handler::CryptoSyncData::try_from(&payload.sync)
+            .map_err(|_| "Cached crypto state is invalid")?;
+        let crypto = data
+            .account_cryptographic_state
+            .ok_or("Cached vault has no account crypto state; connect again")?;
+        client
+            .0
+            .crypto()
+            .initialize_user_crypto(bitwarden_core::key_management::crypto::InitUserCryptoRequest {
+                user_id: payload
+                    .sync
+                    .profile
+                    .as_ref()
+                    .and_then(|p| p.id)
+                    .map(bitwarden_core::UserId::new),
+                kdf_params: unlock.kdf.clone(),
+                email: payload.account.config.email.clone(),
+                account_cryptographic_state: crypto,
+                method:
+                    bitwarden_core::key_management::crypto::InitUserCryptoMethod::MasterPasswordUnlock {
+                        password: password.to_string(),
+                        master_password_unlock: unlock,
+                    },
+                upgrade_token: None,
+            })
+            .await
+            .map_err(|_| "Could not initialize local vault keys")?;
+        let sync = Arc::new(client.sync());
+        let capture = Arc::new(CipherCapture::default());
+        let crypto = Arc::new(CryptoSyncHandler::new(client.0.clone()));
+        let folders = Arc::new(FolderSyncHandler::from_client(&client.0));
+        crypto
+            .on_sync(&payload.sync)
+            .await
+            .map_err(|_| "Could not restore cached account keys")?;
+        folders
+            .on_sync(&payload.sync)
+            .await
+            .map_err(|_| "Could not restore cached folders")?;
+        capture
+            .on_sync(&payload.sync)
+            .await
+            .map_err(|_| "Could not restore cached items")?;
+        sync.register_sync_handler(crypto);
+        sync.register_sync_handler(folders);
+        sync.register_sync_handler(capture.clone());
+        if let Some(root) = &self.cache_root {
+            sync.register_sync_handler(Arc::new(CacheWriter {
+                root: root.clone(),
+                config: payload.account.config.clone(),
+                state: state.clone(),
+                client: PasswordManagerClient(client.0.clone()),
+                warning: self.cache_warning.clone(),
+            }));
+        }
+        self.cache_config = Some(payload.account.config.clone());
+        self.cache_state = Some(state);
+        self.session = Some(Session {
+            email: payload.account.config.email.clone(),
+            client,
+            sync,
+            capture,
+            last_activity: StdMutex::new(Instant::now()),
+            icon_base_url,
+        });
+        self.offline
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.snapshot().await
+    }
+
+    pub(crate) fn spawn_background_sync(
+        &self,
+    ) -> Result<tokio::task::JoinHandle<Result<(), String>>, String> {
+        let sync = self.session.as_ref().ok_or_else(locked)?.sync.clone();
+        Ok(tokio::spawn(async move {
+            tokio::time::timeout(
+                Duration::from_secs(90),
+                sync.sync(SyncRequest {
+                    force: true,
+                    exclude_subdomains: Some(true),
+                }),
+            )
+            .await
+            .map_err(|_| "Background synchronization timed out".to_owned())?
+            .map(|_| ())
+            .map_err(|error| {
+                format!(
+                    "Background sync failed: {error}{}",
+                    diagnostics::error_detail(&error)
+                )
+            })
+        }))
+    }
+    pub(crate) async fn background_snapshot(&self) -> Result<VaultSnapshot, String> {
+        self.offline
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.snapshot_impl(false).await
+    }
     pub async fn refresh(&self) -> Result<VaultSnapshot, String> {
         let session = self.session.as_ref().ok_or_else(locked)?;
         session
@@ -519,12 +705,20 @@ impl VaultService {
                     diagnostics::error_detail(&error)
                 )
             })?;
+        self.offline
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         self.snapshot().await
     }
 
     pub async fn snapshot(&self) -> Result<VaultSnapshot, String> {
+        self.snapshot_impl(true).await
+    }
+    async fn snapshot_impl(&self, activity: bool) -> Result<VaultSnapshot, String> {
+        *self.search_index.lock().unwrap() = None;
         let session = self.session.as_ref().ok_or_else(locked)?;
-        touch(session);
+        if activity {
+            touch(session);
+        }
         let capture = session.capture.0.read().await;
         install_organization_keys(&session.client, &capture).await?;
         let result = session
@@ -561,6 +755,12 @@ impl VaultService {
             items,
             folders,
             decrypt_failures: capture.parse_failures + result.failures.len(),
+            offline: self.offline.load(std::sync::atomic::Ordering::Relaxed),
+            account_id: self
+                .cache_config
+                .as_ref()
+                .and_then(|config| crate::cache::account_id(config).ok()),
+            cache_warning: self.cache_warning.lock().unwrap().clone(),
         })
     }
 
@@ -650,6 +850,30 @@ impl VaultService {
             .collect())
     }
 
+    pub async fn search(&self, query: &str) -> Result<Vec<String>, String> {
+        let session = self.session.as_ref().ok_or_else(locked)?;
+        if self.search_index.lock().unwrap().is_none() {
+            let captured = session.capture.0.read().await;
+            let views = session
+                .client
+                .0
+                .internal
+                .get_key_store()
+                .decrypt_list_with_failures(&captured.ciphers);
+            if !views.1.is_empty() {
+                return Err("Some vault items could not be decrypted for local search".into());
+            }
+            let index = crate::search::SearchIndex::build(&views.0)?;
+            *self.search_index.lock().unwrap() = Some(index);
+        }
+        self.search_index
+            .lock()
+            .unwrap()
+            .as_ref()
+            .ok_or("Local search index is unavailable")?
+            .query(query)
+    }
+
     pub async fn details(&self, id: &str) -> Result<ItemDetails, String> {
         self.item_details(id, false).await
     }
@@ -677,7 +901,6 @@ impl VaultService {
 
     async fn decrypt_one(&self, id: &str) -> Result<CipherView, String> {
         let session = self.session.as_ref().ok_or_else(locked)?;
-        touch(session);
         let cipher = session
             .capture
             .0
@@ -733,6 +956,12 @@ impl VaultService {
     }
 
     pub fn lock(&mut self) {
+        *self.search_index.lock().unwrap() = None;
+        self.cache_config = None;
+        self.cache_state = None;
+        self.offline
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        *self.cache_warning.lock().unwrap() = None;
         self.session = None;
         self.pending_login = None;
         if let Some(clipboard) = self.clipboard.get() {
@@ -1124,7 +1353,9 @@ fn cipher_kind(kind: CipherType) -> &'static str {
     }
 }
 
-fn login_configuration(request: &LoginRequest) -> Result<(ClientSettings, String), String> {
+pub(crate) fn login_configuration(
+    request: &LoginRequest,
+) -> Result<(ClientSettings, String), String> {
     if request.region != "self-hosted" {
         return Ok((
             settings_for(&request.region, None)?,
@@ -1200,6 +1431,106 @@ impl crate::ssh_agent::VaultKeys for VaultService {
 mod tests {
     use super::*;
     #[tokio::test]
+    async fn background_completion_does_not_keep_an_inactive_vault_unlocked() {
+        let client = PasswordManagerClient::new(None);
+        client
+            .0
+            .internal
+            .init_user_id(bitwarden_core::UserId::new(uuid::Uuid::new_v4()))
+            .await
+            .unwrap();
+        let mut service = VaultService {
+            session: Some(Session {
+                email: "fixture@example.invalid".into(),
+                sync: Arc::new(client.sync()),
+                client,
+                capture: Arc::new(CipherCapture::default()),
+                last_activity: StdMutex::new(Instant::now() - Duration::from_secs(2)),
+                icon_base_url: String::new(),
+            }),
+            auto_lock_after: Duration::from_secs(1),
+            ..Default::default()
+        };
+        service.background_snapshot().await.unwrap();
+        assert!(
+            service
+                .search("automatic query refresh")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(service.details("automatic detail refresh").await.is_err());
+        assert!(
+            service.lock_if_idle(),
+            "background completion must not renew the inactivity deadline"
+        );
+    }
+
+    #[tokio::test]
+    async fn stalled_background_download_does_not_block_cached_details_or_local_search() {
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let (headers, received) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                let mut byte = [0];
+                stream.read_exact(&mut byte).await.unwrap();
+                request.push(byte[0]);
+            }
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{").await.unwrap();
+            let _ = headers.send(());
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let client = PasswordManagerClient(bitwarden_core::Client::new(Some(ClientSettings {
+            api_url: format!("{base}/api"),
+            identity_url: format!("{base}/identity"),
+            ..Default::default()
+        })));
+        let mut service = VaultService {
+            session: Some(Session {
+                email: "fixture@example.invalid".into(),
+                sync: Arc::new(client.sync()),
+                client,
+                capture: Arc::new(CipherCapture::default()),
+                last_activity: StdMutex::new(Instant::now()),
+                icon_base_url: String::new(),
+            }),
+            ..Default::default()
+        };
+        let background = service.spawn_background_sync().unwrap();
+        tokio::time::timeout(Duration::from_secs(5), received)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!background.is_finished());
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), service.details("missing"))
+                .await
+                .unwrap()
+                .is_err()
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_secs(1), service.search("missing"))
+                .await
+                .unwrap()
+                .unwrap()
+                .is_empty()
+        );
+        background.abort();
+        let _ = background.await;
+        service.lock();
+        assert!(service.search("missing").await.is_err());
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
     async fn sync_replaces_organization_keys_including_removed_memberships() {
         let capture = CipherCapture::default();
         let id = uuid::Uuid::new_v4();
@@ -1240,7 +1571,7 @@ mod tests {
         VaultService {
             session: Some(Session {
                 email: "test@example.invalid".into(),
-                sync: client.sync(),
+                sync: Arc::new(client.sync()),
                 client,
                 capture: Arc::new(CipherCapture::default()),
                 last_activity: StdMutex::new(Instant::now() - Duration::from_secs(seconds)),

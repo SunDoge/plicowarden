@@ -6,6 +6,9 @@ publish = false
 license = "GPL-3.0-only"
 
 [dependencies]
+rusqlite = { version = "0.39", features = ["bundled"] }
+bitwarden-state = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-crypto = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico", "webp"] }
 bitwarden-api-base = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
 tracing = "0.1"
