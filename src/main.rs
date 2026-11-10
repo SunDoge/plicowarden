@@ -25,6 +25,14 @@ enum Error {
     Desktop { source: plico_desktop::DesktopError },
 }
 fn main() -> Result<(), Error> {
+    if std::env::var_os("PLICOWARDEN_AUTH_TRACE").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        // Deliberately exclude SDK request tracing, which can log auth bodies.
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("off,plicowarden_sdk::service::diagnostics=info")
+            .with_writer(std::io::stderr)
+            .with_ansi(false)
+            .try_init();
+    }
     let options = Options::parse();
     if let Some(output) = options.capture {
         let from_file = options.scenario.is_some();

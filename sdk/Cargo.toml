@@ -6,6 +6,11 @@ publish = false
 license = "GPL-3.0-only"
 
 [dependencies]
+tracing = "0.1"
+http = "1"
+reqwest = { version = "0.13", default-features = false }
+reqwest-middleware = "0.5"
+bitwarden-auth = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
 arboard = { version = "3.7", default-features = false, features = ["wayland-data-control"] }
 async-trait = "0.1.91"
 bitwarden-api-api = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }

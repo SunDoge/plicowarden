@@ -1,3 +1,4 @@
+mod diagnostics;
 mod items;
 mod transfer;
 pub use items::{BatchFailure, BatchMutation, EditData, ItemPatch, Mutation};
@@ -334,7 +335,7 @@ impl VaultService {
         self.lock();
         let (settings, icon_base_url) = login_configuration(&request)?;
         progress(LoginStage::Authenticating);
-        let client = PasswordManagerClient::new(Some(settings));
+        let client = diagnostics::client(settings);
         // SDK legacy decrypt silently replaces failed fields with null/empty.
         // A password client must report failures instead of showing damaged data.
         client
@@ -453,6 +454,7 @@ impl VaultService {
         progress: &(dyn Fn(LoginStage) + Sync),
     ) -> Result<VaultSnapshot, String> {
         progress(LoginStage::Syncing);
+        let sync_timing = diagnostics::Timing::new("initial_sync");
         let sync = client.sync();
         let capture = Arc::new(CipherCapture::default());
         // Crypto handles user/account state. Organization keys are installed
@@ -477,7 +479,9 @@ impl VaultService {
             .await
             .map_err(|_| "The SDK rejected the synced user identity.".to_string())?;
 
+        drop(sync_timing);
         progress(LoginStage::Decrypting);
+        let _decrypt_timing = diagnostics::Timing::new("vault_decrypt");
         install_organization_keys(&client, &*capture.0.read().await).await?;
         self.session = Some(Session {
             email,
@@ -777,6 +781,7 @@ async fn isolated_password_login(
     client: &PasswordManagerClient,
     request: PasswordLoginRequest,
 ) -> Result<PasswordLoginResponse, String> {
+    let _timing = diagnostics::Timing::new("password_login");
     let client = client.0.clone();
     let task = tokio::spawn(async move {
         let request = PasswordLoginRequestGuard(request);
@@ -799,7 +804,7 @@ async fn await_password_login_task(
     let _abort_on_cancel = AbortLogin(task.abort_handle());
     match task.await {
         Ok(Ok(response)) => Ok(response),
-        Ok(Err(error)) => Err(format!("Login failed: {error}")),
+        Ok(Err(error)) => Err(format!("Login failed: {error}{}", diagnostics::error_detail(&error))),
         Err(error) if error.is_panic() => Err(
             "The Bitwarden SDK could not interpret the server's login response. This account or server may not be compatible with the pinned SDK yet."
                 .into(),

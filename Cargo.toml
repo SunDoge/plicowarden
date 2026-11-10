@@ -10,6 +10,7 @@ resolver = "3"
 members = ["sdk"]
 
 [dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 plico = { git = "https://github.com/SunDoge/plico.git", rev = "e13f29dce39aebd1272fa9053f03f2cff32fea2e" }
 plico-dev = { git = "https://github.com/SunDoge/plico.git", rev = "e13f29dce39aebd1272fa9053f03f2cff32fea2e" }
 plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "e13f29dce39aebd1272fa9053f03f2cff32fea2e" }
