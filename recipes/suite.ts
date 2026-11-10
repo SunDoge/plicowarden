@@ -49,7 +49,7 @@ export default suite([
       expectText("Connecting and authenticating… Synthetic account service is offline"),
       expect(button("Copy error")).exists(), click(button("Copy error")),
       expectText("Connecting and authenticating… Synthetic account service is offline"),
-      expect(button("Sign in")).enabled(false), capture("rejected"),
+      expect(button("Sign in")).enabled(), capture("rejected"),
       click(button("Browse demo vault")), expect(buttonsStartingWith("Select ")).count(12),
     ],
   }),

@@ -4,6 +4,7 @@ pub mod protected;
 pub mod security;
 pub mod server;
 pub mod service;
+pub mod icons;
 pub mod ssh_agent;
 pub use bitwarden_vault::{FieldType, FieldView};
 

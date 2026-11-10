@@ -419,3 +419,102 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
             .any(|n| n.role == plico_renderer::SemanticRole::ProgressBar)
     );
 }
+
+fn cached_detail(id: &str, name: &str) -> plicowarden_sdk::service::ItemDetails {
+    plicowarden_sdk::service::ItemDetails {
+        id: id.into(),
+        name: name.into(),
+        kind: "login",
+        username: Some("synthetic-user".into()),
+        password: None,
+        uris: Vec::new(),
+        notes: None,
+        totp: None,
+        cardholder_name: None,
+        card_brand: None,
+        card_number: None,
+        card_exp_month: None,
+        card_exp_year: None,
+        card_code: None,
+        favorite: false,
+        has_password: false,
+        has_totp: false,
+        has_card_number: false,
+        has_card_code: false,
+        editable: true,
+        folder_id: None,
+        deleted: false,
+        identity_title: None,
+        first_name: None,
+        middle_name: None,
+        last_name: None,
+        address1: None,
+        address2: None,
+        address3: None,
+        city: None,
+        state: None,
+        postal_code: None,
+        country: None,
+        company: None,
+        email: None,
+        phone: None,
+        ssn: None,
+        passport_number: None,
+        license_number: None,
+        has_ssn: false,
+        has_passport_number: false,
+        has_license_number: false,
+        password_history: Vec::new(),
+    }
+}
+
+#[test]
+fn cached_real_item_switch_does_not_flash_global_busy_or_loading_cards() {
+    let mut app = Warden::default();
+    app.authenticated = true;
+    app.login_open = false;
+    let first = app.items[0].clone();
+    let second = app.items[1].clone();
+    app.detail_cache
+        .insert(first.id.clone(), cached_detail(&first.id, &first.name));
+    app.detail_cache
+        .insert(second.id.clone(), cached_detail(&second.id, &second.name));
+    app.selected = first.id.clone();
+    app.details = app.detail_cache.get(&first.id).cloned();
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    click(&mut ui, &format!("Select {}", second.name));
+    assert!(!ui.source.view.0.busy);
+    assert_eq!(ui.source.view.0.details.as_ref().unwrap().id, second.id);
+    assert!(ui.source.view.0.pending.is_some());
+    assert!(!ui.source.adapter.placed.iter().any(|n| {
+        n.paint
+            .text
+            .as_deref()
+            .is_some_and(|text| text.starts_with("Loading"))
+    }));
+    // Switching again is possible while the previous read is still in flight.
+    click(&mut ui, &format!("Select {}", first.name));
+    assert_eq!(ui.source.view.0.selected, first.id);
+}
+
+#[test]
+fn downloaded_site_icon_is_declared_as_an_image_in_list_and_details() {
+    let mut app = Warden::default();
+    let png: &[u8] = &[
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+        0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240,
+        31, 0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+    app.items[0].icon = Some(plico::ImageAsset::from_bytes(png));
+    app.selected = app.items[0].id.clone();
+    let ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    assert!(
+        ui.source
+            .adapter
+            .placed
+            .iter()
+            .filter(|n| n.paint.image.is_some())
+            .count()
+            >= 2
+    );
+}

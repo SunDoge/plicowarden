@@ -81,7 +81,9 @@ pub fn brand(ui: &mut UiContext, item: &Item, size: f32) {
             "notion" => Some(SvgAsset::new(include_str!("../assets/notion.svg"))),
             _ => None,
         };
-        if let Some(asset) = asset {
+        if let Some(icon) = &item.icon {
+            image(ui, icon).size(size * 0.7, size * 0.7);
+        } else if let Some(asset) = asset {
             svg(ui, &asset).size(size * 0.62, size * 0.62).color(Color::Literal(item.color));
         } else {
             text(ui, &item.mark).font_size((size * 0.42) as u16).weight(700).color(Color::Literal(item.color));

@@ -26,7 +26,7 @@ fn type_text(ui: &mut Driver<Host>, label: &str, value: &str) {
     ui.execute(Command::Text { text: value.into() }).unwrap();
 }
 #[test]
-fn rejected_http_login_wakes_ui_clears_password_and_can_return_to_demo() {
+fn rejected_http_login_preserves_password_for_retry_and_can_return_to_demo() {
     let (tx, rx) = mpsc::channel();
     let mut host = Host::new(Warden::default(), false);
     host.set_wake_callback(Arc::new(move || {
@@ -46,7 +46,7 @@ fn rejected_http_login_wakes_ui_clears_password_and_can_return_to_demo() {
     let tree = serde_json::to_string(&ui.declarations()).unwrap();
     assert!(!tree.contains("synthetic-test-password"));
     click(&mut ui, "Sign in");
-    assert!(ui.source.view.app.password.is_empty());
+    assert!(!ui.source.view.app.password.is_empty());
     // Completion notification, not sleeping/polling for an arbitrary amount of time.
     while ui.source.view.app.busy {
         rx.recv_timeout(Duration::from_secs(60))
@@ -55,6 +55,7 @@ fn rejected_http_login_wakes_ui_clears_password_and_can_return_to_demo() {
         ui.execute(Command::Snapshot).unwrap();
     }
     assert!(ui.source.view.app.error.contains("HTTPS"));
+    assert!(!ui.source.view.app.password.is_empty());
     assert!(!ui.source.view.app.authenticated);
     click(&mut ui, "Browse demo vault");
     assert_eq!(ui.source.view.app.visible().len(), 12);

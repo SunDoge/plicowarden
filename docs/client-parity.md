@@ -17,6 +17,7 @@ authorized live sandbox check is recorded in `experiments/live-vault-validation.
 | Bulk actions | Multi-select/select all, favorite/unfavorite, archive/unarchive, trash, restore/purge, move to/from personal folders; destructive confirmation; per-item failures | SDK locked/ownership guards and UI command tests; no real server mutation |
 | Folders | Create/rename/delete, single/bulk move, folder/no-folder filtering | Authorized live create/rename/delete and single-item move in/out; bulk/filter tests remain synthetic |
 | Secrets | Explicit reveal/copy, password history, TOTP generation/expiry | Synthetic tests and worker boundaries |
+| Site icons | SDK icon URLs retained; host downloads images asynchronously from the configured icon service, with first-letter fallback | Public Edgewarden icon endpoint checked; bounded worker/cache and dimension guards; no vault tokens attached |
 | Export | Personal non-trashed items/folders, official JSON or password-protected JSON; item count checked before writing; no overwrite; Unix file mode 0600 | File privacy/guard tests; no real-account export/restore roundtrip |
 | Import | Official SDK KDBX parser/encryption/upload, optional key file path, personal destination, 10 MiB bound, refresh after upload | Locked/size guards and form tests; no real-account import |
 | Generator | Password, passphrase, username, copy and in-memory history | OS randomness and native-input tests |
@@ -76,3 +77,15 @@ request. Late events from cancelled/older requests are ignored. The worker's
 the sign-in error rather than clearing it. Stage labels describe actual operation
 boundaries; authentication includes prelogin, key derivation and token exchange,
 with no fabricated percentage or per-request breakdown inside the pinned SDK.
+
+Detail-only reads do not set the global busy state. Cached item details remain
+visible while revalidating, and loading placeholders appear only when no cached
+details exist. The detail toolbar reserves its space during the initial read.
+Login submission retains the masked secret buffer for same-account retries; a
+timeout cleanup preserves it as well. Successful login, explicit lock/cancel and
+returning to the account step clear it. The buffer is not persisted.
+
+Site icon downloads use a separate host-owned worker (four concurrent requests,
+a bounded queue, up to 512 cached success/failure entries per session). Encoded
+images are capped at 128 KiB and 256×256 pixels. Failures retain the initial
+fallback and do not fail account operations; locking drops the loader/cache.

@@ -81,3 +81,24 @@ probe received 6,754 bytes (about 60% fewer than the earlier response) and
 completed sync in 4.06s; authentication took 5.42s and decryption about 1ms.
 Network variability prevents attributing the timing difference entirely to the
 parameter change. Both probes ended with zero items/folders/decryption failures.
+
+## Explicit proxy comparison
+
+The local HTTP proxy at `127.0.0.1:7890` was compared with direct access using
+the same executable and endpoint. Two public config requests over the proxy
+completed in 0.82s/0.66s; direct requests took 2.52s and then hit a 20s
+connection timeout. A proxy-enabled read-only sandbox login took 1.83s for
+authentication and 2.24s for sync; a subsequent direct login took 4.85s and
+10.12s respectively, with the same 6,754-byte response. These small sequential
+samples favor a route/connectivity explanation but do not exclude deployment
+placement or establish a representative latency distribution.
+
+To opt into an existing local HTTP proxy for one launch:
+
+```sh
+HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 NO_PROXY= \
+  PLICOWARDEN_AUTH_TRACE=1 ./target/debug/plicowarden 2>plicowarden-auth.log
+```
+
+The port is an example from this machine; use the actual local proxy address.
+No system proxy setting is changed by this command.

@@ -10,6 +10,8 @@ pub struct Item {
     pub name: String,
     pub user: String,
     pub site: String,
+    pub icon_url: Option<String>,
+    pub icon: Option<plico::ImageAsset>,
     pub mark: String,
     pub color: u32,
     pub favorite: bool,
@@ -148,6 +150,8 @@ pub fn demo_items() -> Vec<Item> {
         name: name.into(),
         user: user.into(),
         site: site.into(),
+        icon_url: None,
+        icon: None,
         mark: mark.into(),
         color,
         favorite,
@@ -566,7 +570,7 @@ impl Warden {
         }
         self.ticket = self.ticket.wrapping_add(1);
         self.pending = Some(self.ticket);
-        self.busy = true;
+        self.busy = !matches!(&request, Request::Details(_));
         self.login_stage = matches!(&request, Request::Login { .. } | Request::TwoFactor(_))
             .then_some(plicowarden_sdk::service::LoginStage::Authenticating);
         self.error.clear();
@@ -754,7 +758,9 @@ impl Warden {
         };
         self.request(Request::Login {
             config,
-            password: self.password.take(),
+            password: self
+                .password
+                .with_value(|value| Zeroizing::new(value.to_owned())),
         });
     }
     pub fn snapshot(&mut self, snapshot: VaultSnapshot) {
@@ -775,6 +781,8 @@ impl Warden {
                 name: i.name,
                 user: i.subtitle,
                 site: String::new(),
+                icon_url: i.icon_url,
+                icon: None,
                 color: 0x65618e,
                 favorite: i.favorite,
                 kind: i.kind.into(),
@@ -833,8 +841,13 @@ impl Warden {
             let login_error = (self.login_open && !self.authenticated)
                 .then(|| std::mem::take(&mut self.error))
                 .filter(|error| !error.is_empty());
+            let retry_password = login_error.as_ref().map(|_| self.password.take());
             self.lock();
             if let Some(error) = login_error {
+                if let Some(password) = retry_password {
+                    self.password.set(password);
+                    self.login_password_step = true;
+                }
                 self.error = error;
                 self.notice = "Sign-in failed. Try again.".into();
             } else {

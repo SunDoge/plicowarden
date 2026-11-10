@@ -180,3 +180,31 @@ fn verification_guards_and_back_navigation_drop_pending_secrets() {
     assert_eq!(app.email, "synthetic@example.invalid");
     assert!(matches!(app.commands.last(), Some(HostCommand::Disconnect)));
 }
+
+#[test]
+fn login_error_and_timeout_keep_secret_for_retry_but_explicit_lock_erases_it() {
+    let mut app = Warden::default();
+    app.login_open = true;
+    app.login_password_step = true;
+    app.email = "test@example.invalid".into();
+    app.password
+        .set(Zeroizing::new("synthetic-retry-password".into()));
+    app.login();
+    let ticket = app.pending.unwrap();
+    app.apply(Event {
+        ticket,
+        result: Err("Synthetic timeout".into()),
+    });
+    assert!(!app.password.is_empty());
+    app.apply(Event {
+        ticket: 0,
+        result: Ok(Reply::Locked),
+    });
+    assert!(app.login_password_step);
+    app.password
+        .with_value(|value| assert_eq!(value, "synthetic-retry-password"));
+    app.login();
+    assert!(app.busy);
+    app.lock();
+    assert!(app.password.is_empty());
+}

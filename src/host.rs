@@ -16,6 +16,9 @@ pub struct Host {
     desktop: Option<crate::desktop::DesktopHost>,
     window_actions: std::collections::VecDeque<plico_renderer::HostAction>,
     client: Option<Client>,
+    icon_loader: Option<plicowarden_sdk::icons::IconLoader>,
+    icon_cache: std::collections::HashMap<String, Option<plico::ImageAsset>>,
+    icon_pending: std::collections::HashSet<String>,
     transfer_generation: u64,
     transfer_tx: mpsc::Sender<(u64, Option<plicowarden_sdk::Request>)>,
     transfer_rx: mpsc::Receiver<(u64, Option<plicowarden_sdk::Request>)>,
@@ -37,6 +40,9 @@ impl Host {
             desktop: None,
             window_actions: Default::default(),
             client: None,
+            icon_loader: None,
+            icon_cache: Default::default(),
+            icon_pending: Default::default(),
             transfer_generation: 0,
             transfer_tx,
             transfer_rx,
@@ -71,6 +77,55 @@ impl Host {
         }
         host.app.zoom.set(host.app.appearance.ui_scale);
         host
+    }
+    fn poll_site_icons(&mut self) -> bool {
+        if !self.app.authenticated {
+            self.icon_loader = None;
+            self.icon_cache.clear();
+            self.icon_pending.clear();
+            return false;
+        }
+        let mut changed = false;
+        while let Some((url, bytes)) = self
+            .icon_loader
+            .as_ref()
+            .and_then(|loader| loader.try_recv())
+        {
+            self.icon_pending.remove(&url);
+            self.icon_cache.insert(
+                url,
+                bytes.map(|bytes| plico::ImageAsset::from_bytes(&bytes)),
+            );
+            changed = true;
+        }
+        for item in &mut self.app.items {
+            let Some(url) = &item.icon_url else { continue };
+            if let Some(icon) = self.icon_cache.get(url) {
+                if item.icon.is_none() {
+                    item.icon = icon.clone();
+                }
+                continue;
+            }
+            if self.icon_pending.contains(url) {
+                continue;
+            }
+            if self.icon_cache.len() + self.icon_pending.len() >= 512 {
+                break;
+            }
+            if self.icon_loader.is_none() {
+                self.icon_loader = plicowarden_sdk::icons::IconLoader::new(self.wake.clone());
+            }
+            if self
+                .icon_loader
+                .as_ref()
+                .is_some_and(|loader| loader.request(url.clone()))
+            {
+                self.icon_pending.insert(url.clone());
+            } else {
+                break;
+            }
+        }
+        changed
     }
     pub fn with_desktop(mut self, desktop: crate::desktop::DesktopHost) -> Self {
         self.desktop = Some(desktop);
@@ -174,6 +229,7 @@ impl HostView for Host {
         self.window_actions.pop_front()
     }
     fn show(&mut self, ui: &mut plico::UiContext<'_>) {
+        self.poll_site_icons();
         App::show(&mut self.app, ui);
         self.flush();
     }
@@ -193,12 +249,15 @@ impl HostView for Host {
             desktop.set_wake(wake.clone());
         }
         self.wake = wake;
+        if let Some(loader) = &self.icon_loader {
+            loader.set_wake(self.wake.clone());
+        }
         if let Some(client) = &self.client {
             client.set_wake(Arc::clone(&self.wake));
         }
     }
     fn poll_updates(&mut self) -> bool {
-        let mut changed = false;
+        let mut changed = self.poll_site_icons();
         while let Some(event) = self
             .desktop
             .as_mut()

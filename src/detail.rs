@@ -120,7 +120,7 @@ impl Warden {
     fn live_detail(&mut self, ui: &mut UiContext, item: &Item) {
         let details = self.details.take();
         let editable = details.as_ref().is_some_and(|d| d.editable);
-        if details.is_some() {
+        {
             row(ui).position(plico::Position::Relative).width_percent(100.).padding(10).gap(6).wrap(true)
                 .align(Align::Center).radius(14.).corner_smoothing(1.).background(Color::Panel).border(1., EDGE)
             + |ui|
@@ -181,7 +181,7 @@ impl Warden {
         // placeholder cards pulse in place of the real fields (MyGO's
         // skeleton placeholder), so switching items never collapses and
         // re-expands the layout. Screen readers get one Loading status.
-        if self.busy {
+        if details.is_none() && self.pending.is_some() {
             let pulse = ui.loop_progress("detail-pulse", std::time::Duration::from_millis(1200),
                 plico::Easing::EaseInOut);
             let shade = 0.55 + 0.45 * pulse;
