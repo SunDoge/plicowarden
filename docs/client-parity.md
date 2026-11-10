@@ -3,7 +3,8 @@
 Reference checkout: local `bitwarden/clients`, read-only. This is a feature inventory,
 not a claim that Plicowarden is already a complete replacement. “Implemented” means
 there is a UI → host → SDK path; real-account/network/platform verification is
-listed separately. No real account or vault is used by the automated fixtures.
+listed separately. Automated UI fixtures use synthetic data; a separate, explicitly
+authorized live sandbox check is recorded in `experiments/live-vault-validation.md`.
 
 ## Implemented application paths
 
@@ -11,10 +12,10 @@ listed separately. No real account or vault is used by the automated fixtures.
 | --- | --- | --- |
 | Vault navigation | Navigation, list and details default to three columns down to 820 logical px; explicit sidebar toggle retained | UI and viewport tests |
 | Search and filters | Text, type, favorites, folder, archive, trash and TOTP | Synthetic input/recipes |
-| Login | Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry, animated busy indicator and worker-driven authentication/sync/unlock stages | Synthetic replies and rejected configuration; public Edgewarden SDK prelogin checked, no real account login |
-| Item operations | Personal login/card/identity/note/SSH create/edit, revision patches, favorites, clone, archive, trash, restore/purge | SDK guards and synthetic forms; organization items remain read-only |
+| Login | Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry, animated busy indicator and worker-driven authentication/sync/unlock stages | Synthetic replies/configuration; authorized Edgewarden account login via SDK and UI host, authenticator challenge/invalid-code/valid-code paths checked |
+| Item operations | Personal login/card/identity/note/SSH create/edit, revision patches, favorites, clone, archive, trash, restore/purge | SDK guards/synthetic forms; authorized live personal login/card/identity/SSH CRUD checked; note delete required cleanup after transport failure (see live validation); organization items remain read-only |
 | Bulk actions | Multi-select/select all, favorite/unfavorite, archive/unarchive, trash, restore/purge, move to/from personal folders; destructive confirmation; per-item failures | SDK locked/ownership guards and UI command tests; no real server mutation |
-| Folders | Create/rename/delete, single/bulk move, folder/no-folder filtering | Existing SDK/UI paths |
+| Folders | Create/rename/delete, single/bulk move, folder/no-folder filtering | Authorized live create/rename/delete and single-item move in/out; bulk/filter tests remain synthetic |
 | Secrets | Explicit reveal/copy, password history, TOTP generation/expiry | Synthetic tests and worker boundaries |
 | Export | Personal non-trashed items/folders, official JSON or password-protected JSON; item count checked before writing; no overwrite; Unix file mode 0600 | File privacy/guard tests; no real-account export/restore roundtrip |
 | Import | Official SDK KDBX parser/encryption/upload, optional key file path, personal destination, 10 MiB bound, refresh after upload | Locked/size guards and form tests; no real-account import |
@@ -52,7 +53,7 @@ this app does not claim byte-for-byte parity or full transient-memory erasure.
 | OS integration | Touch ID/Windows Hello, keychain storage, launch-at-login, screen-lock/session events, deep links and app shortcuts |
 | Settings | Remaining security/account/app preferences, language/theme, favicon/privacy preferences |
 | Packaging | Signed/notarized macOS bundle, Windows/Linux packaging, updater and application menus |
-| Verification | Real-account sandbox tests, native macOS visual/input/window tests, accessibility/platform review |
+| Verification | Broader real-account sandbox coverage (imports/exports, attachments, organizations), native macOS visual/input/window tests, accessibility/platform review |
 
 ## Source entry points inspected
 

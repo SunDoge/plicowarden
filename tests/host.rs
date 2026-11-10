@@ -206,3 +206,32 @@ fn saving_security_updates_live_preferences_only_after_successful_persistence() 
         }
     }
 }
+
+#[test]
+fn copy_login_error_uses_native_clipboard_without_clearing_error_or_starting_account_work() {
+    use plico_renderer::HostAction;
+    let mut app = plicowarden::PreviewConfig {
+        screen: "login".into(),
+        ..Default::default()
+    }
+    .app();
+    let message = "Connecting and authenticating…
+Synthetic server error: request timed out.
+Additional diagnostic detail.";
+    app.error = message.into();
+    let mut ui = Driver::new(Host::new(app, false), 1000, 720).unwrap();
+    click(&mut ui, "Copy error");
+    assert_eq!(
+        ui.source.take_host_action(),
+        Some(HostAction::SetClipboard(message.into()))
+    );
+    assert_eq!(ui.source.view.app.error, message);
+    assert!(!ui.source.view.app.busy);
+    assert!(ui.source.view.app.pending.is_none());
+    assert!(!ui.source.view.app.authenticated);
+    click(&mut ui, "Copy error");
+    assert_eq!(
+        ui.source.take_host_action(),
+        Some(HostAction::SetClipboard(message.into()))
+    );
+}

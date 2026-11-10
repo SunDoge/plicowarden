@@ -115,6 +115,9 @@ impl Host {
                         wake();
                     });
                 }
+                HostCommand::CopyError(message) => self
+                    .window_actions
+                    .push_back(plico_renderer::HostAction::SetClipboard(message)),
                 HostCommand::Window(command) => self
                     .window_actions
                     .push_back(plico_renderer::HostAction::Window(command)),

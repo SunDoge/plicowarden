@@ -282,8 +282,8 @@ impl Warden {
                         self.lock();
                         self.notice = "Sign-in cancelled.".into();
                     }
-                    if !self.error.is_empty() {
-                        text(ui, &self.error).color(Color::Danger).width_percent(100.);
+                    if copyable_error(ui, &self.error) {
+                        self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
                     }
                     if !self.notice.is_empty() {
                         text(ui, &self.notice).color(MUTED).width_percent(100.);
@@ -351,9 +351,11 @@ impl Warden {
                                         }
                                     }
                                 }
-                                if !self.environment_error.is_empty() {
-                                    text(ui, &self.environment_error).color(Color::Danger)
-                                        .width_percent(100.);
+                                if copyable_error(ui, &self.environment_error) {
+                                    self.commands.push(
+                                        crate::model::HostCommand::CopyError(
+                                            self.environment_error.clone()),
+                                    );
                                 }
                                 if button(ui).radius(6.).corner_smoothing(1.)
                                     .elevation(Elevation::CONTROL).icon(crate::icons::get("check"))
@@ -552,8 +554,8 @@ impl Warden {
                 picker(ui, "Destination folder", &mut self.move_folder,
                     self.popups.entry("move-folder".into()).or_default(), &folders);
             };
-            if !self.error.is_empty() {
-                text(ui, &self.error).color(Color::Danger).width_percent(100.);
+            if copyable_error(ui, &self.error) {
+                self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
             }
             row(ui).width_percent(100.).gap(10).justify(Justify::End) + |ui| {
                 if button(ui).text("Cancel").aria_label("Cancel move").ghost().radius(6.).clicked() {
@@ -628,8 +630,8 @@ impl Warden {
                     });
                 }
             };
-            if !self.error.is_empty() {
-                text(ui, &self.error).color(Color::Danger).width_percent(100.);
+            if copyable_error(ui, &self.error) {
+                self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
             }
             if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                 .icon(crate::icons::get("check")).text("Done").ghost().background_alpha(0.).disabled(self.busy)

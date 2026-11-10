@@ -31,6 +31,23 @@ pub fn surface<'u, 'e>(ui: &'u mut UiContext<'e>) -> Layout<'u, 'e> {
         .border(1., Color::Literal(0xd9d9de))
         .elevation(Elevation::PANEL)
 }
+/// Ordinary diagnostics use the native host clipboard, independently of the
+/// account worker, so copying never clears an error or starts an SDK session.
+#[component]
+#[rustfmt::skip]
+pub fn copyable_error(ui: &mut UiContext, message: &str) -> bool {
+    if message.is_empty() {
+        return false;
+    }
+    let mut copied = false;
+    column(ui).width_percent(100.).gap(6) + |ui| {
+        column(ui).width_percent(100.).selectable(true) + |ui| {
+            text(ui, message).color(Color::Danger).width_percent(100.);
+        };
+        copied = button(ui).text("Copy error").icon(crate::icons::get("copy")).radius(6.).font_size(13).clicked();
+    };
+    copied
+}
 #[component]
 pub fn glyph(ui: &mut UiContext, name: &str, size: f32, color: Color) {
     icon(ui, icons::get(name)).size(size, size).color(color);
@@ -226,8 +243,9 @@ impl Warden {
                             {
                                 self.detail(ui, &item, compact);
                             }
-                            if !self.error.is_empty() {
-                                text(ui, &self.error).color(Color::Danger).width_percent(100.);
+                            if copyable_error(ui, &self.error) {
+                                self.commands.push(
+                                    crate::model::HostCommand::CopyError(self.error.clone()));
                             }
                             if !self.notice.is_empty() {
                                 text(ui, &self.notice).font_size(13).color(MUTED)

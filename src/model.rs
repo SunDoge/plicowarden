@@ -160,6 +160,7 @@ pub fn demo_items() -> Vec<Item> {
     .collect()
 }
 pub enum HostCommand {
+    CopyError(String),
     Transfer(crate::transfer::TransferIntent),
     Window(plico_renderer::WindowCommand),
     SshDecision { id: u64, allow: bool },
