@@ -464,10 +464,17 @@ impl VaultService {
         sync.register_sync_handler(capture.clone());
         sync.sync(SyncRequest {
             force: true,
-            exclude_subdomains: None,
+            // Match the official desktop client: equivalent-domain data is
+            // only needed by autofill, which this application does not provide.
+            exclude_subdomains: Some(true),
         })
         .await
-        .map_err(|error| format!("Login succeeded, but the first vault sync failed: {error}"))?;
+        .map_err(|error| {
+            format!(
+                "Login succeeded, but the first vault sync failed: {error}{}",
+                diagnostics::error_detail(&error)
+            )
+        })?;
         let user_id =
             capture.0.read().await.user_id.ok_or_else(|| {
                 "The sync response did not identify the signed-in user.".to_string()
@@ -501,10 +508,17 @@ impl VaultService {
             .sync
             .sync(SyncRequest {
                 force: true,
-                exclude_subdomains: None,
+                // Match the official desktop client: equivalent-domain data is
+                // only needed by autofill, which this application does not provide.
+                exclude_subdomains: Some(true),
             })
             .await
-            .map_err(|error| format!("Vault sync failed: {error}"))?;
+            .map_err(|error| {
+                format!(
+                    "Vault sync failed: {error}{}",
+                    diagnostics::error_detail(&error)
+                )
+            })?;
         self.snapshot().await
     }
 
