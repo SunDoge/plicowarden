@@ -4,22 +4,12 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Appearance {
-    pub liquid_glass: bool,
     pub ui_scale: f64,
-    pub animate_reflections: bool,
-    pub reduce_motion: bool,
-    pub frost: f64,
-    pub tint: f64,
 }
 impl Default for Appearance {
     fn default() -> Self {
         Self {
-            liquid_glass: true,
             ui_scale: crate::display::default_scale(cfg!(target_os = "macos")),
-            animate_reflections: false,
-            reduce_motion: false,
-            frost: 0.42,
-            tint: 0.26,
         }
     }
 }
@@ -33,28 +23,6 @@ pub enum Error {
     TooLarge,
 }
 impl Appearance {
-    /// Application preferences select a framework material; no shader internals here.
-    pub fn material(&self) -> plico::LiquidGlass {
-        plico::LiquidGlass {
-            enabled: self.liquid_glass,
-            animated: self.animate_reflections,
-            reduce_motion: self.reduce_motion,
-            frost: self.frost as f32,
-            tint_opacity: self.tint as f32,
-            ..Default::default()
-        }
-    }
-
-    /// Denser frost for text-heavy overlays; retains the shared framework shader.
-    pub fn dialog_material(&self) -> plico::LiquidGlass {
-        plico::LiquidGlass {
-            frost: (self.frost as f32).max(0.86),
-            tint_opacity: (self.tint as f32).max(0.72),
-            bevel: 18.,
-            ..self.material()
-        }
-    }
-
     pub fn path() -> Option<PathBuf> {
         directories::ProjectDirs::from("", "", "Plicowarden")
             .map(|d| d.data_local_dir().join("appearance.json"))
@@ -69,16 +37,6 @@ impl Appearance {
             self.ui_scale.clamp(0.5, 3.)
         } else {
             Self::default().ui_scale
-        };
-        self.frost = if self.frost.is_finite() {
-            self.frost.clamp(0., 1.)
-        } else {
-            0.42
-        };
-        self.tint = if self.tint.is_finite() {
-            self.tint.clamp(0.2, 0.9)
-        } else {
-            0.26
         };
         self
     }

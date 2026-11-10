@@ -132,8 +132,7 @@ impl Warden {
     #[rustfmt::skip]
     pub fn transfer_modal_ui(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.transfer_modal);
-        ui.modal(&mut state).material(self.appearance.dialog_material()).header(false).title("Import / Export")
-            .width(600.).children(|ui| {
+        ui.modal(&mut state).header(false).title("Import / Export").width(600.).children(|ui| {
             self.transfer_ui(ui);
         });
         self.transfer_modal = state;
@@ -148,7 +147,7 @@ impl Warden {
         column(ui).width_percent(100.).gap(12) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(12) + |ui| {
                 text(ui, "Import / Export").font_size(22).weight(700).grow(1.);
-                if tool(ui, self.appearance.material(), "close", "Close import / export", false) {
+                if tool(ui, "close", "Close import / export", false) {
                     ui.close_modal();
                 }
             };
@@ -186,9 +185,8 @@ impl Warden {
                     checkbox(ui, "Export without encryption", &mut self.transfer.plaintext_ack).disabled(disabled);
                 }
                 text(ui, "Choose a new filename; existing files will not be overwritten.").font_size(12).color(MUTED).width_percent(100.);
-                if button(ui).text("Export vault to file").icon(crate::icons::get("save")).primary()
-                    .material(self.appearance.material()).radius(20.).elevation(Elevation::CONTROL)
-                    .disabled(disabled || !self.transfer.export_ready()).clicked()
+                if button(ui).text("Export vault to file").icon(crate::icons::get("save")).primary().radius(6.)
+                    .elevation(Elevation::CONTROL).disabled(disabled || !self.transfer.export_ready()).clicked()
                 {
                     self.begin_export();
                 }
@@ -204,8 +202,8 @@ impl Warden {
                     .disabled(disabled);
                 checkbox(ui, "Import into my personal vault", &mut self.transfer.import_ack).disabled(disabled);
                 if button(ui).text("Choose database and import").icon(crate::icons::get("plus")).primary()
-                    .material(self.appearance.material()).radius(20.).elevation(Elevation::CONTROL)
-                    .disabled(disabled || !self.transfer.import_ack).clicked()
+                    .radius(6.).elevation(Elevation::CONTROL).disabled(disabled || !self.transfer.import_ack)
+                    .clicked()
                 {
                     self.begin_import();
                 }

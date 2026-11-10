@@ -70,20 +70,10 @@ fn generator_uses_each_requested_character_group_and_length() {
 fn appearance_is_the_only_persisted_projection_and_roundtrips() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("appearance.json");
-    let value = plicowarden::appearance::Appearance {
-        liquid_glass: false,
-        ui_scale: 0.85,
-        animate_reflections: true,
-        reduce_motion: true,
-        frost: 0.32,
-        tint: 0.7,
-    };
+    let value = plicowarden::appearance::Appearance { ui_scale: 0.85 };
     value.save(&path).unwrap();
     let restored = plicowarden::appearance::Appearance::load(&path).unwrap();
-    assert!(!restored.liquid_glass);
     assert_eq!(restored.ui_scale, 0.85);
-    assert!(restored.reduce_motion);
-    assert_eq!(restored.frost, 0.32);
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(!text.contains("password"));
     assert!(!text.contains("items"));

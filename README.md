@@ -69,9 +69,11 @@ so small dimmed controls do not each allocate a full Retina window texture;
 the 128 MiB frame budget remains in place.
 
 Reference JSON/TS preview fixtures remain at 100% density on every platform.
-The application draws its own window controls on the glass header: close,
-minimize and maximize/restore. Native decorations are disabled, so the controls
-appear in both normal windows and headless previews. They retain OS-point sizing
+Linux normal windows request native decorations: the window system supplies
+buttons and the outer contour, without an additional client-area round clip.
+The exact corners and shadow follow the desktop's decoration implementation.
+macOS and Windows retain the custom close, minimize and maximize/restore buttons.
+Synthetic preview fixtures explicitly enable custom controls for repeatable captures. They retain OS-point sizing
 independent of content zoom. The same controls are available on the login page;
 the title region starts an OS-managed window drag. Maximize/restore queries the
 current native state rather than maintaining an application-side guess.
@@ -138,10 +140,8 @@ The `plico new` template follows the same fast-iteration policy for new apps.
   does not depend on this service; UI-only edits do not recompile its implementation.
 - `src/appearance.rs`: appearance-only JSON, saved by a host worker under the OS
   local data directory for **Plicowarden**, independently of C# preferences.
-- App ambience retains the C# composition. Liquid glass, contact/ambient shadows
-  and focus chrome come from Plico's public APIs; appearance preferences select
-  `LiquidGlass` parameters and `Elevation` presets. No app-local glass shader.
-  Motion runs in the renderer; reduce motion disables moving reflections.
+- The interface uses ordinary Plico widgets, opaque panels, subtle borders and
+  shadows. Colors and control proportions follow MyGo's standard light theme.
 
 ## Official client parity
 
@@ -313,26 +313,15 @@ client or user preferences. Failures retain source location, flow, semantic evid
 last successful capture and a failure PNG. This supersedes `recipe_probe` for
 composable test authoring; the older runner remains for its original benchmark.
 
-## Glass controls
+## Appearance
 
-Action buttons and circular tools use Plico's scene-backed button material,
-continuous capsule contours, contact/ambient shadows and material hover/press
-feedback. Primary actions use accent-tinted glass. Folder/list navigation remains
-quiet. Dialogs use the same framework material on a fixed background, with denser
-frost/tint for readable form text, overlay shadows and a lighter scrim. Dialog
-content scrolls independently of its material surface. The appearance switch disables control glass as well as panel glass.
+The application uses ordinary Plico widgets throughout, including toolbars,
+login, settings and dialogs. White panels sit on a neutral gray background;
+controls use MyGo's light palette, 6px corners and blue accents. Circular icon
+buttons keep their circular shape. Borders and subtle shadows separate surfaces.
+No backdrop blur, refraction or ambience shader is declared by the application.
 
-## Glass material verification
-
-Default frost/tint are 0.42/0.26. Existing saved appearance settings are retained;
-use Reset appearance and Save appearance to adopt the current defaults.
-The selected-item title, toolbar and sidebar use scene-backed glass; reading
-surfaces retain a translucent white fill. Shadows are separate from refraction.
-
-```sh
-cargo test --locked -p plico-desktop --no-default-features --features wgpu --test materials -- --ignored
-```
-
-Run this framework-only command in a Plico checkout at `9c3eab38a16c8151b32275135ccc7f82fa9a3e8f`. The framework wgpu regression renders a detailed checkerboard with and without refraction,
-checks that the curved edge changes while the flat center does not, verifies two
-shadow layers reach the renderer, and checks repeat captures remain identical.
+Interface scale remains persistent. Older appearance files are accepted: obsolete
+glass preferences are ignored, while the saved scale is retained. The legacy
+`opaque` preview input is accepted for existing recipes; all previews now use
+solid surfaces.

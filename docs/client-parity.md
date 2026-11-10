@@ -23,7 +23,7 @@ listed separately. No real account or vault is used by the automated fixtures.
 | Tray / notifications | Native menu (open/lock/quit), close-to-tray with fallback, saved close/notification preferences, generic SSH notification activation | Isolated Linux X11/D-Bus smoke and host lock tests; native macOS/Windows and packaged notification identity pending |
 | Window chrome | App-drawn controls and OS drag/minimize/close/maximize commands; content zoom independent | Command/geometry tests; macOS runtime pending |
 | Security settings | Device-local auto-lock (1–60 minutes), clipboard expiry (10–120 seconds), minimize after successful copy; meaningful input refreshes a live session | Synthetic expiry, persistence/error and copy command tests; no real clipboard expiry or macOS runtime test |
-| Appearance | Glass, shadow, reflection/reduced motion and interface zoom | Render recipes; native macOS appearance pending |
+| Appearance | Solid MyGo-style controls, subtle borders/shadows and persistent interface zoom | Render recipes; native macOS appearance pending |
 
 Bulk writes are not transactions: ownership/reprompt guards run before any write,
 then independent server operations can succeed or fail. The result retains failed

@@ -19,7 +19,7 @@ impl Warden {
                 {
                     self.bulk_selected.extend(visible.iter().map(|item| item.id.clone()));
                 }
-                if tool(ui, self.appearance.material(), "minus", "Clear selection", self.busy) {
+                if tool(ui, "minus", "Clear selection", self.busy) {
                     self.bulk_selected.clear();
                 }
                 let actions: &[(&str, &str, &str)] = if self.filter == "Trash" {
@@ -44,7 +44,7 @@ impl Warden {
                 };
                 for &(action, label, name) in actions {
                     ui.keyed(action, |ui| {
-                        if tool(ui, self.appearance.material(), name, label, disabled) {
+                        if tool(ui, name, label, disabled) {
                             if action == "trash" || action == "purge" {
                                 self.bulk_confirm = Some(action.into());
                                 self.bulk_modal.open();
@@ -55,11 +55,11 @@ impl Warden {
                     });
                 }
                 if self.filter != "Trash"
-                    && tool(ui, self.appearance.material(), "folder", "Move selected to folder", disabled)
+                    && tool(ui, "folder", "Move selected to folder", disabled)
                 {
                     self.open_move_dialog(self.bulk_selected.iter().cloned().collect());
                 }
-                if tool(ui, self.appearance.material(), "close", "Done selecting", self.busy) {
+                if tool(ui, "close", "Done selecting", self.busy) {
                     self.bulk_mode = false;
                     self.bulk_selected.clear();
                 }
@@ -76,8 +76,7 @@ impl Warden {
         let mut state = std::mem::take(&mut self.bulk_modal);
         let mut confirm = false;
         let action = self.bulk_confirm.clone().unwrap_or_default();
-        modal(ui, &mut state).material(self.appearance.dialog_material()).title("Confirm bulk action").width(440.)
-            .children(|ui| {
+        modal(ui, &mut state).title("Confirm bulk action").width(440.).children(|ui| {
             text!(
                 ui,
                 "{} {} items?",

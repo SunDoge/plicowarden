@@ -71,12 +71,8 @@ fn saving_appearance_runs_in_host_and_reopens_the_saved_projection() {
     }));
     let mut ui = Driver::new(host, 1440, 1000).unwrap();
     click(&mut ui, "Settings");
-    ui.execute(Command::Click {
-        role: "switch".into(),
-        label: "Liquid Glass".into(),
-        occurrence: None,
-    })
-    .unwrap();
+    ui.source.view.app.zoom.set(1.25);
+    ui.execute(Command::Snapshot).unwrap();
     click(&mut ui, "Save appearance");
     while ui.source.view.app.settings_saving {
         rx.recv_timeout(Duration::from_secs(60))
@@ -84,10 +80,11 @@ fn saving_appearance_runs_in_host_and_reopens_the_saved_projection() {
         ui.source.poll_async();
         ui.execute(Command::Snapshot).unwrap();
     }
-    assert!(
-        !plicowarden::appearance::Appearance::load(&path)
+    assert_eq!(
+        plicowarden::appearance::Appearance::load(&path)
             .unwrap()
-            .liquid_glass
+            .ui_scale,
+        1.25
     );
 }
 
@@ -146,6 +143,7 @@ fn custom_window_buttons_dispatch_real_commands_on_vault_and_login() {
     for login in [false, true] {
         let mut app = Warden::default();
         app.login_open = login;
+        app.custom_titlebar = true;
         let mut ui = Driver::new(Host::new(app, false), 820, 640).unwrap();
         for (label, expected) in [
             ("Minimize window", WindowCommand::Minimize),

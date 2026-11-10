@@ -92,9 +92,15 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     assert_eq!(display::default_scale(true), 0.85);
     assert_eq!(display::default_scale(false), 1.);
     assert!(!display::window_options(true).decorations);
-    assert!(!display::window_options(false).decorations);
+    assert_eq!(
+        display::window_options(false).decorations,
+        cfg!(target_os = "linux")
+    );
     assert_eq!(display::window_options(true).corner_radius, 16);
-    assert_eq!(display::window_options(false).corner_radius, 16);
+    assert_eq!(
+        display::window_options(false).corner_radius,
+        if cfg!(target_os = "linux") { 0 } else { 16 }
+    );
     assert_eq!(
         display::window_options(true).initial_inner_size,
         (1224, 850)
@@ -105,11 +111,7 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     );
     let legacy: Appearance = serde_json::from_str(r#"{"liquidGlass":false,"frost":0.42}"#).unwrap();
     assert_eq!(legacy.ui_scale, Appearance::default().ui_scale);
-    let invalid = Appearance {
-        ui_scale: f64::NAN,
-        ..Default::default()
-    }
-    .validated();
+    let invalid = Appearance { ui_scale: f64::NAN }.validated();
     assert_eq!(invalid.ui_scale, Appearance::default().ui_scale);
 }
 
@@ -197,14 +199,6 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
         before,
         "secondary text follows native contrast"
     );
-    assert!(
-        source.view.0.appearance.liquid_glass,
-        "native fallback must not overwrite the saved glass option"
-    );
-    assert!(
-        !source.view.0.appearance.reduce_motion,
-        "native reduction must not overwrite the saved app option"
-    );
     fn shaders(nodes: &[plico::ViewNode]) -> usize {
         nodes
             .iter()
@@ -213,8 +207,56 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
     }
     assert_eq!(
         shaders(&source.engine.snapshot()),
-        1,
-        "only the static ambience remains; glass backdrop shaders are removed"
+        0,
+        "ordinary controls do not declare backdrop or ambience shaders"
     );
     assert!(!source.has_anim());
+}
+
+#[test]
+fn solid_controls_never_declare_shaders_even_with_legacy_glass_preferences() {
+    fn assert_plain(nodes: &[plico::ViewNode]) {
+        for node in nodes {
+            assert_ne!(node.kind, plico::Kind::Shader);
+            assert_plain(&node.children);
+        }
+    }
+    for screen in [
+        "vault",
+        "login",
+        "settings",
+        "editor",
+        "folders",
+        "transfer",
+        "ssh-approval",
+    ] {
+        let mut app = plicowarden::PreviewConfig {
+            screen: screen.into(),
+            ..Default::default()
+        }
+        .app();
+        app.appearance = serde_json::from_str(r#"{"liquidGlass":true,"animateReflections":true,"frost":0.1,"tint":0.2,"uiScale":1.25}"#).unwrap();
+        assert_eq!(app.appearance.ui_scale, 1.25);
+        let mut source = Source::with_clock(NativeApp(app), plico::VirtualClock::default());
+        let mut text = TextContext::new();
+        let mut scene = plico_renderer::Scene::new();
+        source
+            .render_retained_frame(&mut scene, &mut text, (1440, 1000), 1.)
+            .unwrap();
+        assert!(
+            source.last_error.is_none(),
+            "{screen}: {:?}",
+            source.last_error
+        );
+        assert_plain(&source.engine.snapshot());
+    }
+}
+
+#[test]
+fn normal_linux_windows_use_native_buttons_while_preview_controls_remain_explicit() {
+    assert_eq!(
+        Warden::default().custom_titlebar,
+        !cfg!(target_os = "linux")
+    );
+    assert!(plicowarden::PreviewConfig::default().app().custom_titlebar);
 }

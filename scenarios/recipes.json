@@ -16,7 +16,7 @@
     "name": "settings",
     "scenario": "scenarios/settings.json",
     "present": [
-      "Liquid Glass",
+      "Interface scale",
       "Reset appearance",
       "Close settings"
     ],

@@ -381,7 +381,7 @@ impl Default for Warden {
             bulk_confirm: None,
             bulk_modal: ModalState::default(),
             sidebar: true,
-            custom_titlebar: true,
+            custom_titlebar: !cfg!(target_os = "linux"),
             titlebar_pressed: false,
             reveal: false,
             settings_open: false,

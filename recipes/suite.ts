@@ -30,7 +30,7 @@ export default suite([
     state: demoVault(),
     steps: [
       ...flow("open-settings", [click(button("Settings")), expect(button("Close settings")).exists()]),
-      click({ role: "switch", label: "Liquid Glass" }), capture("glass-disabled"),
+      expect({ role: "switch", label: "Liquid Glass" }).absent(), capture("solid-controls"),
       click(button("Reset appearance")), capture("defaults"),
       click(button("Close settings")), expect(button("Close settings")).absent(),
     ],

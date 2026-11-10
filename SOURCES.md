@@ -12,10 +12,9 @@ crates remain Apache-2.0 and do not depend on this application.
   `43f390e7a800845c66872df377767ab57f7c67b6`. Official Bitwarden SDK pinned to
   `fbd21679c1c3690cba424ad3dbb0ba662eb9863e`.
 - Brand SVGs: Simple Icons 16.0.0, CC0 (asset notice included), via C# Warden.
-  `ambience.wgsl`: C# Warden's app-specific background composition.
-- Glass and elevation are consumed from `plico::materials`; Warden no longer
-  embeds a glass shader or maintains optical formulas. The framework records
-  MyGO/Plico provenance and licenses in `crates/plico/third_party/README.md`.
+- Standard light-theme colors and control corner proportions follow MyGo's
+  `ui/theme.go` (`LightTheme`). Plico supplies ordinary widgets and elevation;
+  the application does not use glass materials or background shaders.
 
 
 All reused files are local copies, with no dependency on the original checkouts.

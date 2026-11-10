@@ -3,6 +3,7 @@ export interface VaultFixture {
   query: string;
   selected: string;
   filter: string;
+  /** Legacy preview input: all widgets now use solid surfaces. */
   opaque: boolean;
   custom_titlebar?: boolean;
 }

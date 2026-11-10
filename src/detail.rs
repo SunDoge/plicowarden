@@ -22,7 +22,7 @@ impl Warden {
             self.live_detail(ui, item);
             return;
         }
-        surface(ui).material(self.appearance.material()).padding(26).gap(10) + |ui| {
+        surface(ui).padding(26).gap(10) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(18) + |ui| {
                 brand(ui, item, 62.);
                 column(ui).width(0.).grow(1.).min_width(0.).gap(5) + |ui| {
@@ -37,7 +37,7 @@ impl Warden {
             text(ui, "Username").font_size(13).color(MUTED);
             row(ui).width_percent(100.).align(Align::Center).justify(Justify::SpaceBetween) + |ui| {
                 text(ui, &item.user).font_size(17);
-                if tool(ui, self.appearance.material(), "copy", "Copy username", false) {
+                if tool(ui, "copy", "Copy username", false) {
                     self.preview_notice();
                 }
             };
@@ -46,7 +46,7 @@ impl Warden {
             surface(ui).width(0.).grow(1.7).min_width(if compact { 220. } else { 0. }).padding(18).gap(10) + |ui| {
                 row(ui).width_percent(100.).align(Align::Center).justify(Justify::SpaceBetween) + |ui| {
                     text(ui, "Password").font_size(13).color(MUTED);
-                    if tool(ui, self.appearance.material(), if self.reveal { "eye-off" } else { "eye" },
+                    if tool(ui, if self.reveal { "eye-off" } else { "eye" },
                         if self.reveal { "Hide password" } else { "Show password" }, false) {
                         self.reveal = !self.reveal;
                     }
@@ -103,7 +103,7 @@ impl Warden {
                             text(ui, name).font_size(14);
                             text(ui, size).font_size(12).color(MUTED);
                         };
-                        if tool(ui, self.appearance.material(), "eye", &format!("Preview {name}"), false) {
+                        if tool(ui, "eye", &format!("Preview {name}"), false) {
                             self.preview_notice();
                         }
                     };
@@ -122,48 +122,49 @@ impl Warden {
         let editable = details.as_ref().is_some_and(|d| d.editable);
         if details.is_some() {
             row(ui).position(plico::Position::Relative).width_percent(100.).padding(10).gap(6).wrap(true)
-                .align(Align::Center).radius(18.).corner_smoothing(1.).material(self.appearance.material()) + |ui|
+                .align(Align::Center).radius(14.).corner_smoothing(1.).background(Color::Panel).border(1., EDGE)
+            + |ui|
             {
                 if item.deleted {
                     text(ui, "In Trash").color(MUTED).grow(1.);
-                    if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                        .elevation(Elevation::CONTROL).icon(crate::icons::get("restore")).text("Restore item")
-                        .primary().disabled(self.busy).clicked()
+                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                        .icon(crate::icons::get("restore")).text("Restore item").primary().disabled(self.busy)
+                        .clicked()
                     {
                         self.action(&item.id, "restore");
                     }
-                    if tool(ui, self.appearance.material(), "trash", "Delete permanently", self.busy) {
+                    if tool(ui, "trash", "Delete permanently", self.busy) {
                         self.ask(&item.id, "purge");
                     }
                 } else {
-                    if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                        .elevation(Elevation::CONTROL).icon(crate::icons::get("edit")).text("Edit")
-                        .aria_label("Edit item").primary().disabled(self.busy || !editable).clicked()
+                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                        .icon(crate::icons::get("edit")).text("Edit").aria_label("Edit item").primary()
+                        .disabled(self.busy || !editable).clicked()
                     {
                         self.request(Request::Edit(item.id.clone()));
                     }
-                    if tool(ui, self.appearance.material(), "star",
-                        if item.favorite { "Unfavorite" } else { "Favorite" }, self.busy || !editable) {
+                    if tool(ui, "star", if item.favorite { "Unfavorite" } else { "Favorite" },
+                        self.busy || !editable) {
                         self.action(&item.id, if item.favorite { "unfavorite" } else { "favorite" });
                     }
-                    if tool(ui, self.appearance.material(), "copy", "Duplicate item", self.busy || !editable) {
+                    if tool(ui, "copy", "Duplicate item", self.busy || !editable) {
                         self.action(&item.id, "clone");
                     }
-                    if tool(ui, self.appearance.material(), "archive",
-                        if item.archived { "Unarchive" } else { "Archive item" }, self.busy || !editable) {
+                    if tool(ui, "archive", if item.archived { "Unarchive" } else { "Archive item" },
+                        self.busy || !editable) {
                         self.action(&item.id, if item.archived { "unarchive" } else { "archive" });
                     }
-                    if tool(ui, self.appearance.material(), "folder", "Move to folder", self.busy || !editable) {
+                    if tool(ui, "folder", "Move to folder", self.busy || !editable) {
                         self.open_move_dialog(vec![item.id.clone()]);
                     }
                     column(ui).grow(1.).end();
-                    if tool(ui, self.appearance.material(), "trash", "Move to trash", self.busy || !editable) {
+                    if tool(ui, "trash", "Move to trash", self.busy || !editable) {
                         self.ask(&item.id, "trash");
                     }
                 }
             };
         }
-        surface(ui).material(self.appearance.material()).padding(26) + |ui| {
+        surface(ui).padding(26) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(18) + |ui| {
                 brand(ui, item, 62.);
                 column(ui).width(0.).grow(1.).min_width(0.).gap(6) + |ui| {
@@ -184,9 +185,9 @@ impl Warden {
                 surface(ui).padding(20).gap(10) + |ui| {
                     text(ui, "Username").font_size(13).color(MUTED);
                     text(ui, username).font_size(17).width_percent(100.);
-                    if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                        .elevation(Elevation::CONTROL).icon(crate::icons::get("copy")).text("Copy username").ghost()
-                        .background_alpha(0.).disabled(self.busy).clicked()
+                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                        .icon(crate::icons::get("copy")).text("Copy username").ghost().background_alpha(0.)
+                        .disabled(self.busy).clicked()
                     {
                         self.request(Request::CopyField {
                             id: item.id.clone(),
@@ -201,8 +202,7 @@ impl Warden {
                         surface(ui).width(0.).grow(1.).min_width(230.).padding(20).gap(12) + |ui| {
                             row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center) + |ui| {
                                 text(ui, "Password").font_size(13).color(MUTED);
-                                if button(ui).material(self.appearance.material()).radius(20.)
-                                    .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                     .icon(crate::icons::get(if self.reveal { "eye-off" } else { "eye" }))
                                     .text(if self.reveal { "Hide password" } else { "Show password" })
                                     .ghost().background_alpha(0.).disabled(self.busy).clicked()
@@ -223,10 +223,9 @@ impl Warden {
                                     "••••••••••••"
                                 },
                             ).font_size(20).width_percent(100.);
-                            if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                                .elevation(Elevation::CONTROL).icon(crate::icons::get("copy"))
-                                .text("Copy password").ghost().background_alpha(0.).disabled(self.busy)
-                                .clicked()
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .icon(crate::icons::get("copy")).text("Copy password").ghost()
+                                .background_alpha(0.).disabled(self.busy).clicked()
                             {
                                 self.request(Request::CopyField {
                                     id: item.id.clone(),
@@ -239,10 +238,9 @@ impl Warden {
                         surface(ui).width(0.).grow(1.).min_width(230.).padding(20).gap(12) + |ui| {
                             text(ui, "One-time code").font_size(13).color(MUTED);
                             text(ui, self.code.as_ref().map_or("— — — — — —", |c| c.code.as_str())).font_size(25).weight(650);
-                            if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                                .elevation(Elevation::CONTROL).icon(crate::icons::get("clock"))
-                                .text("Generate current code").ghost().background_alpha(0.).disabled(self.busy)
-                                .clicked()
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .icon(crate::icons::get("clock")).text("Generate current code").ghost()
+                                .background_alpha(0.).disabled(self.busy).clicked()
                             {
                                 self.request(Request::Totp(item.id.clone()));
                             }
@@ -276,8 +274,8 @@ impl Warden {
                         "{} previous passwords retained",
                         detail.password_history.len()
                     ).color(MUTED).width_percent(100.);
-                    if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                        .elevation(Elevation::CONTROL).icon(crate::icons::get("clock"))
+                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                        .icon(crate::icons::get("clock"))
                         .text(if self.reveal_history { "Hide password history" } else { "Show password history" })
                         .ghost().disabled(self.busy).clicked()
                     {
@@ -303,8 +301,7 @@ impl Warden {
                                 text(ui, self.previous_passwords[index].1.as_str()).width_percent(100.);
                                 {
                                     let value = self.previous_passwords[index].1.clone();
-                                    if button(ui).material(self.appearance.material()).radius(20.)
-                                        .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                         .icon(crate::icons::get("copy")).text("Copy previous password").ghost()
                                         .disabled(self.busy).clicked()
                                     {

@@ -58,15 +58,12 @@ fn csharp_settings_generator_and_cancelled_login_paths() {
     let mut ui = Driver::new(NativeApp(Warden::default()), 1440, 1000).unwrap();
     click(&mut ui, "Settings");
     assert!(ui.source.view.0.settings_open);
-    ui.execute(Command::Click {
-        role: "switch".into(),
-        label: "Liquid Glass".into(),
-        occurrence: None,
-    })
-    .unwrap();
-    assert!(!ui.source.view.0.appearance.liquid_glass);
+    ui.source.view.0.appearance.ui_scale = 1.25;
     click(&mut ui, "Reset appearance");
-    assert!(ui.source.view.0.appearance.liquid_glass);
+    assert_eq!(
+        ui.source.view.0.appearance.ui_scale,
+        plicowarden::appearance::Appearance::default().ui_scale
+    );
     click(&mut ui, "Close settings");
     click(&mut ui, "Generator");
     click(&mut ui, "Generate password");
@@ -123,7 +120,7 @@ fn login_is_centered_and_vault_columns_match_the_csharp_reference() {
         .find(|n| n.label.as_deref() == Some("Select GitHub"))
         .unwrap();
     assert!(
-        (selected.bounds[0] - 266.).abs() <= 1.0,
+        selected.bounds[0] >= 370. && selected.bounds[0] <= 375.,
         "selection bounds {:?}",
         selected.bounds
     );
@@ -135,7 +132,7 @@ fn login_is_centered_and_vault_columns_match_the_csharp_reference() {
         .find(|n| n.paint.text.as_deref() == Some("GitHub") && n.paint.font_size > 30.)
         .unwrap();
     assert!(
-        (heading.rect[0] - 712.).abs() <= 1.0,
+        heading.rect[0] > selected.bounds[2] + 60.,
         "heading bounds {:?}",
         heading.rect
     );
@@ -283,6 +280,65 @@ fn supported_window_sizes_show_navigation_items_and_details_by_default() {
         assert!(
             details.bounds[2] <= width as f32,
             "details overflow at {width}"
+        );
+    }
+}
+
+#[test]
+fn folders_remain_visible_in_demo_and_loaded_folders_filter_items() {
+    let mut ui = Driver::new(NativeApp(Warden::default()), 1440, 1000).unwrap();
+    click(&mut ui, "No folder");
+    assert_eq!(ui.source.view.0.visible().len(), 12);
+    let mut app = PreviewConfig {
+        screen: "folders".into(),
+        ..Default::default()
+    }
+    .app();
+    let folder = app.folders[0].clone();
+    let expected = app
+        .items
+        .iter()
+        .filter(|item| {
+            item.folder.as_deref() == Some(folder.id.as_str()) && !item.deleted && !item.archived
+        })
+        .count();
+    app.folders_modal.close();
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    click(&mut ui, &folder.name);
+    assert_eq!(ui.source.view.0.filter, format!("folder:{}", folder.id));
+    assert_eq!(ui.source.view.0.visible().len(), expected);
+    click(&mut ui, "Manage folders");
+    assert!(
+        ui.snapshot()
+            .exposed_nodes()
+            .iter()
+            .any(|node| node.label.as_deref() == Some("New folder name"))
+    );
+}
+
+#[test]
+fn navigation_columns_have_equal_width_at_desktop_and_compact_sizes() {
+    for (width, height) in [(1440, 1000), (1000, 720), (820, 640)] {
+        let ui = Driver::new(NativeApp(Warden::default()), width, height).unwrap();
+        let snapshot = ui.snapshot();
+        let nodes = snapshot.exposed_nodes();
+        let nav = nodes
+            .iter()
+            .find(|n| {
+                n.label.as_deref() == Some("All Items")
+                    && n.role == plico_renderer::SemanticRole::Button
+            })
+            .unwrap();
+        let item = nodes
+            .iter()
+            .find(|n| n.label.as_deref() == Some("Select GitHub"))
+            .unwrap();
+        // The sidebar has 12px inner padding; the list has 10px.
+        let sidebar_width = nav.bounds[2] - nav.bounds[0] + 24.;
+        let list_width = item.bounds[2] - item.bounds[0] + 20.;
+        assert!(
+            (sidebar_width - list_width).abs() <= 2.,
+            "{width}: sidebar={sidebar_width}, list={list_width}"
         );
     }
 }

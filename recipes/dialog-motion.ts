@@ -1,7 +1,7 @@
 import { advance, button, capture, click, expect, recipe, suite } from "../tools/recipes/src/index.ts";
 import { demoVault } from "./fixtures/vault.ts";
 
-export default suite([false, true].map(opaque => recipe(`dialog-motion-${opaque ? "opaque" : "glass"}`, {
+export default suite([false, true].map(opaque => recipe(`dialog-motion-${opaque ? "legacy-opaque" : "solid"}`, {
   state: demoVault({ screen: "ssh-approval", opaque }),
   viewport: { width: 1120, height: 820, scale: 1 },
   steps: [

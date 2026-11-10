@@ -28,19 +28,14 @@ pub fn picker(
 }
 #[component]
 #[rustfmt::skip]
-fn region_selector(
-    ui: &mut UiContext,
-    selected: &mut usize,
-    disabled: bool,
-    material: LiquidGlass,
-) {
-    row(ui).gap(2).padding(4).radius(19.).background(Color::Literal(0xe5edf2)) + |ui| {
+fn region_selector(ui: &mut UiContext, selected: &mut usize, disabled: bool) {
+    row(ui).gap(2).padding(4).radius(8.).background(Color::Control) + |ui| {
         for (index, label) in ["Self-hosted", "Bitwarden US", "Bitwarden EU"].iter().enumerate()
         {
             ui.keyed(index as u64, |ui| {
-                let control = button(ui).text(*label).height(30.).padding_x(8).radius(15.).font_size(13);
+                let control = button(ui).text(*label).height(30.).padding_x(8).radius(6.).font_size(13);
                 let control = if *selected == index {
-                    control.material(material).elevation(Elevation::SUBTLE)
+                    control.background(Color::Panel).border(1., EDGE).elevation(Elevation::SUBTLE)
                 } else {
                     control.ghost().background_alpha(0.)
                 };
@@ -159,8 +154,7 @@ impl Warden {
                                     self.continue_login();
                                 }
                             };
-                            if button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("arrow-right")).text("Continue").primary()
                                 .height(42.).width_percent(100.)
                                 .disabled(self.busy || self.email.trim().is_empty()).clicked()
@@ -178,8 +172,7 @@ impl Warden {
                                 }
                             };
                             checkbox(ui, "Show master password", &mut self.login_show_password).disabled(self.busy);
-                            if button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("login"))
                                 .text(if self.busy { "Logging in…" } else { "Sign in" }).primary()
                                 .height(42.).width_percent(100.)
@@ -213,8 +206,7 @@ impl Warden {
                                 text_input(ui, "Verification code", &self.otp).autofocus(true)
                                     .request_focus(focus).height(42.).width_percent(100.)
                                     .disabled(self.busy).response().submitted;
-                            if button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("check"))
                                 .text(if self.busy { "Verifying…" } else { "Verify" }).primary().height(42.)
                                 .width_percent(100.).disabled(self.busy || self.otp.is_empty()).clicked()
@@ -227,8 +219,7 @@ impl Warden {
                                 .color(Color::Warning).width_percent(100.);
                         }
                         if self.factor == "email"
-                            && button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("mail")).text("Send email code").ghost()
                                 .background_alpha(0.).disabled(self.busy).clicked()
                         {
@@ -236,9 +227,9 @@ impl Warden {
                         }
                     }
                     if self.busy
-                        && button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                            .elevation(Elevation::CONTROL).icon(crate::icons::get("close"))
-                            .text("Cancel sign-in").ghost().background_alpha(0.).clicked()
+                        && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            .icon(crate::icons::get("close")).text("Cancel sign-in").ghost()
+                            .background_alpha(0.).clicked()
                     {
                         self.lock();
                         self.notice = "Sign-in cancelled.".into();
@@ -251,9 +242,9 @@ impl Warden {
                     }
                     if (self.login_password_step || !self.factors.is_empty())
                         && !self.busy
-                        && button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                            .elevation(Elevation::CONTROL).icon(crate::icons::get("arrow-left"))
-                            .text("Back").width_percent(100.).height(40.).clicked()
+                        && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            .icon(crate::icons::get("arrow-left")).text("Back").width_percent(100.)
+                            .height(40.).clicked()
                     {
                         self.back_to_email();
                     }
@@ -267,8 +258,7 @@ impl Warden {
                                 "eu" => "bitwarden.eu",
                                 _ => "Self-hosted server",
                             };
-                            if button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("external")).text(label).ghost()
                                 .background_alpha(0.).color(Color::Accent).disabled(self.busy).clicked()
                             {
@@ -284,7 +274,7 @@ impl Warden {
                                     "eu" => 2,
                                     _ => 0,
                                 };
-                                region_selector(ui, &mut region, self.busy, self.appearance.material());
+                                region_selector(ui, &mut region, self.busy);
                                 if self.region
                                     != ["self-hosted", "us", "eu"][region.min(2)]
                                 {
@@ -317,10 +307,9 @@ impl Warden {
                                     text(ui, &self.environment_error).color(Color::Danger)
                                         .width_percent(100.);
                                 }
-                                if button(ui).material(self.appearance.material()).radius(20.)
-                                    .corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                    .icon(crate::icons::get("check")).text("Done").width_percent(100.)
-                                    .clicked()
+                                if button(ui).radius(6.).corner_smoothing(1.)
+                                    .elevation(Elevation::CONTROL).icon(crate::icons::get("check"))
+                                    .text("Done").width_percent(100.).clicked()
                                     && self.validate_login_server()
                                 {
                                     self.environment_open = false;
@@ -329,9 +318,9 @@ impl Warden {
                         }
                     };
                 }
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("grid")).text("Browse demo vault")
-                    .ghost().background_alpha(0.).width_percent(100.).disabled(self.busy).clicked()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("grid")).text("Browse demo vault").ghost().background_alpha(0.)
+                    .width_percent(100.).disabled(self.busy).clicked()
                 {
                     self.lock();
                     self.items = crate::model::demo_items();
@@ -358,9 +347,9 @@ impl Warden {
                     text(ui, "Changes are encrypted before they leave this device.").font_size(13)
                         .color(MUTED).width_percent(100.);
                 };
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("close")).text("Cancel editing")
-                    .ghost().background_alpha(0.).disabled(self.busy).clicked()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("close")).text("Cancel editing").ghost().background_alpha(0.)
+                    .disabled(self.busy).clicked()
                 {
                     cancel = true;
                 }
@@ -396,9 +385,9 @@ impl Warden {
                 ui.keyed(key, |ui| edit_field(ui, &mut draft, key, label));
             }
             if draft.kind == "login"
-                && button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("sync"))
-                    .text("Generate a strong password").ghost().background_alpha(0.).disabled(self.busy).clicked()
+                && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("sync")).text("Generate a strong password").ghost().background_alpha(0.)
+                    .disabled(self.busy).clicked()
             {
                 match crate::generator::generate(24, true) {
                     Ok(value) => draft.buffer("password", true, false).set(value),
@@ -408,9 +397,9 @@ impl Warden {
             ui.keyed("notes", |ui| edit_field(ui, &mut draft, "notes", "Notes"));
             row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center) + |ui| {
                 text(ui, "Custom fields").weight(650);
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("plus")).text("Add custom field")
-                    .ghost().background_alpha(0.).clicked()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("plus")).text("Add custom field").ghost().background_alpha(0.)
+                    .clicked()
                 {
                     draft.custom.push(plicowarden_sdk::FieldView {
                         name: Some(String::new()),
@@ -460,9 +449,9 @@ impl Warden {
                             }
                             field.r#type = kind;
                         }
-                        if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                            .elevation(Elevation::CONTROL).icon(crate::icons::get("close")).text("Remove field")
-                            .ghost().background_alpha(0.).clicked()
+                        if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            .icon(crate::icons::get("close")).text("Remove field").ghost().background_alpha(0.)
+                            .clicked()
                         {
                             remove = Some(index);
                         }
@@ -481,8 +470,8 @@ impl Warden {
                 if self.busy {
                     text(ui, "Saving…").color(MUTED);
                 }
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("save")).text("Save item").primary()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("save")).text("Save item").primary()
                     .disabled(self.busy || empty || !self.authenticated).clicked()
                 {
                     save = true;
@@ -501,8 +490,7 @@ impl Warden {
     pub fn move_dialog(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.move_modal);
         let mut confirmed = false;
-        modal(ui, &mut state).material(self.appearance.dialog_material()).title("Move to folder").width(440.)
-            .children(|ui| {
+        modal(ui, &mut state).title("Move to folder").width(440.).children(|ui| {
             text!(
                 ui,
                 "Choose a destination for {} item{}.",
@@ -520,13 +508,11 @@ impl Warden {
                 text(ui, &self.error).color(Color::Danger).width_percent(100.);
             }
             row(ui).width_percent(100.).gap(10).justify(Justify::End) + |ui| {
-                if button(ui).text("Cancel").aria_label("Cancel move").ghost()
-                    .material(self.appearance.material()).radius(20.).clicked()
-                {
+                if button(ui).text("Cancel").aria_label("Cancel move").ghost().radius(6.).clicked() {
                     ui.close_modal();
                 }
                 if button(ui).text("Move").aria_label("Move selected items").icon(crate::icons::get("folder"))
-                    .primary().material(self.appearance.material()).radius(20.).elevation(Elevation::CONTROL)
+                    .primary().radius(6.).elevation(Elevation::CONTROL)
                     .disabled(self.busy || self.move_ids.is_empty()).clicked()
                 {
                     confirmed = true;
@@ -542,8 +528,7 @@ impl Warden {
     #[rustfmt::skip]
     pub fn folder_manager(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.folders_modal);
-        modal(ui, &mut state).material(self.appearance.dialog_material()).header(false).title("Folders").width(560.)
-            .children(|ui| {
+        modal(ui, &mut state).header(false).title("Folders").width(560.).children(|ui| {
             text(ui, "Folders").font_size(24).weight(700);
             text(ui, "Organize your personal vault. Folder names are encrypted.").width_percent(100.).color(MUTED);
             column(ui).width_percent(100.).max_height(360.).scroll_y(true).gap(10) + |ui| {
@@ -555,8 +540,7 @@ impl Warden {
                             text_input_string(ui, "Folder name", value).width(0.).grow(1.)
                                 .disabled(self.busy);
                             let name = value.clone();
-                            if button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("edit")).text("Rename").ghost().background_alpha(0.)
                                 .disabled(
                                 self.busy
@@ -570,8 +554,7 @@ impl Warden {
                                     delete: false,
                                 });
                             }
-                            if button(ui).material(self.appearance.material()).radius(20.)
-                                .corner_smoothing(1.).elevation(Elevation::CONTROL)
+                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .icon(crate::icons::get("trash")).text("Delete folder").ghost()
                                 .background_alpha(0.).disabled(self.busy).clicked()
                             {
@@ -585,9 +568,9 @@ impl Warden {
             row(ui).width_percent(100.).gap(8) + |ui| {
                 text_input_string(ui, "New folder name", &mut self.folder_name).placeholder("New folder")
                     .width(0.).grow(1.).disabled(self.busy);
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("plus")).text("Create folder")
-                    .primary().disabled(self.busy || self.folder_name.trim().is_empty()).clicked()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("plus")).text("Create folder").primary()
+                    .disabled(self.busy || self.folder_name.trim().is_empty()).clicked()
                 {
                     let name = std::mem::take(&mut self.folder_name);
                     self.request(Request::Folder {
@@ -600,9 +583,9 @@ impl Warden {
             if !self.error.is_empty() {
                 text(ui, &self.error).color(Color::Danger).width_percent(100.);
             }
-            if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                .elevation(Elevation::CONTROL).icon(crate::icons::get("check")).text("Done").ghost()
-                .background_alpha(0.).disabled(self.busy).clicked()
+            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                .icon(crate::icons::get("check")).text("Done").ghost().background_alpha(0.).disabled(self.busy)
+                .clicked()
             {
                 ui.close_modal();
             }
@@ -634,19 +617,17 @@ impl Warden {
                 "Move to trash",
             ),
         };
-        modal(ui, &mut state).material(self.appearance.dialog_material()).title(title).width(480.).children(|ui| {
+        modal(ui, &mut state).title(title).width(480.).children(|ui| {
             text(ui, title).font_size(24).weight(700);
             text(ui, message).width_percent(100.).color(MUTED);
             row(ui).width_percent(100.).justify(Justify::End).gap(10) + |ui| {
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("close")).text("Cancel").ghost()
-                    .background_alpha(0.).clicked()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("close")).text("Cancel").ghost().background_alpha(0.).clicked()
                 {
                     ui.close_modal();
                 }
-                if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                    .elevation(Elevation::CONTROL).icon(crate::icons::get("trash")).text(label).primary()
-                    .clicked()
+                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                    .icon(crate::icons::get("trash")).text(label).primary().clicked()
                 {
                     ui.close_modal();
                     if action == "deleteFolder" {
@@ -675,8 +656,7 @@ impl Warden {
             state.close();
         }
         let mut decision = None;
-        modal(ui, &mut state).material(self.appearance.dialog_material()).title("SSH signing request").width(560.)
-            .children(|ui| {
+        modal(ui, &mut state).title("SSH signing request").width(560.).children(|ui| {
             let Some(approval) = approval.as_ref() else { return; };
             column(ui).gap(16).width_percent(100.) + |ui| {
                 text(ui, "Allow one SSH signature?").font_size(24).weight(700).width_percent(100.);
@@ -688,12 +668,11 @@ impl Warden {
                 text(ui, "The destination and purpose are not verified. Only allow a request you just initiated. This request expires after 30 seconds.")
                     .color(MUTED).width_percent(100.);
                 row(ui).gap(12).justify(Justify::End).width_percent(100.) + |ui| {
-                    if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                        .elevation(Elevation::CONTROL).icon(crate::icons::get("close")).text("Deny SSH signature")
-                        .clicked() { decision = Some(false); }
-                    if button(ui).material(self.appearance.material()).radius(20.).corner_smoothing(1.)
-                        .elevation(Elevation::CONTROL).icon(crate::icons::get("check")).text("Allow SSH signature once")
-                        .primary().disabled(self.busy).clicked() { decision = Some(true); }
+                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                        .icon(crate::icons::get("close")).text("Deny SSH signature").clicked() { decision = Some(false); }
+                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                        .icon(crate::icons::get("check")).text("Allow SSH signature once").primary().disabled(self.busy)
+                        .clicked() { decision = Some(true); }
                 };
             };
         });

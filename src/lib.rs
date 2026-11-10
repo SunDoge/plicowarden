@@ -21,16 +21,16 @@ impl plico_dev::App for Warden {
     }
     fn theme(&self) -> plico::Theme {
         let mut theme = plico::Theme::light();
-        theme.foreground = 0x243443;
-        theme.muted = 0x526674;
+        theme.foreground = 0x18181b;
+        theme.muted = 0x71717a;
         theme.panel = 0xffffff;
-        theme.control = 0xf8f8fa;
-        theme.border = 0xe5e4e9;
-        theme.control_hover = 0xefedf3;
-        theme.control_pressed = 0xe7e3ee;
-        theme.selection = 0xe6e1ee;
-        theme.accent = 0x286c85;
-        theme.metrics.font_size = 15;
+        theme.control = 0xf4f4f5;
+        theme.border = 0xd9d9de;
+        theme.control_hover = 0xe9e9ec;
+        theme.control_pressed = 0xdddde1;
+        theme.selection = 0xdbe7fc;
+        theme.accent = 0x2563eb;
+        theme.metrics.font_size = 14;
         theme
     }
     fn on_key(&mut self, key: &str) -> bool {
@@ -74,6 +74,7 @@ pub struct PreviewConfig {
     pub query: String,
     pub filter: Option<String>,
     pub selected: Option<String>,
+    /// Legacy preview input; all surfaces are now opaque.
     pub opaque: bool,
     #[serde(alias = "native_titlebar")]
     pub custom_titlebar: bool,
@@ -103,7 +104,6 @@ impl PreviewConfig {
         if let Some(selected) = &self.selected {
             app.selected = selected.clone();
         }
-        app.appearance.liquid_glass = !self.opaque;
         match self.screen.as_str() {
             "ssh-approval" => {
                 // Synthetic preview only: no host/client, worker, socket or real key.

@@ -11,10 +11,11 @@ pub fn window_options(macos: bool) -> WindowOptions {
     } else {
         (1440, 1000, 820, 640)
     };
+    let native_frame = !macos && cfg!(target_os = "linux");
     WindowOptions::new()
         .title("Plicowarden")
-        .decorations(false)
-        .corner_radius(16)
+        .decorations(native_frame)
+        .corner_radius(if native_frame { 0 } else { 16 })
         .initial_inner_size(width, height)
         .min_inner_size(min_width, min_height)
 }
