@@ -260,7 +260,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -666,7 +666,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_repr",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "uuid",
@@ -684,7 +684,7 @@ dependencies = [
  "bitwarden-uuid",
  "serde",
  "serde_repr",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "uuid",
 ]
 
@@ -719,7 +719,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_repr",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tracing",
  "url",
  "uuid",
@@ -774,7 +774,7 @@ dependencies = [
  "sha1",
  "sha2 0.11.1",
  "subtle",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "typenum",
@@ -804,7 +804,7 @@ dependencies = [
  "bitwarden-crypto",
  "bitwarden-sync",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -815,7 +815,7 @@ dependencies = [
  "data-encoding",
  "data-encoding-macro",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -856,7 +856,7 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_json",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "url",
  "uuid",
  "zeroize",
@@ -882,7 +882,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tracing",
  "uuid",
 ]
@@ -902,7 +902,7 @@ dependencies = [
  "schemars 1.2.3",
  "serde",
  "serde_json",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -921,7 +921,7 @@ dependencies = [
  "data-encoding",
  "keepass",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "uuid",
  "zeroize",
 ]
@@ -962,7 +962,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "zeroize",
 ]
 
@@ -979,7 +979,7 @@ dependencies = [
  "bitwarden-organization-crypto",
  "chrono",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "uuid",
 ]
 
@@ -1020,7 +1020,7 @@ dependencies = [
  "bitwarden-user-crypto-management",
  "bitwarden-vault",
  "reqwest-middleware",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -1045,7 +1045,7 @@ source = "git+https://github.com/bitwarden/sdk-internal.git?rev=fbd21679c1c3690c
 dependencies = [
  "bitwarden-error",
  "rand 0.10.3",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "uuid",
 ]
 
@@ -1067,7 +1067,7 @@ dependencies = [
  "serde",
  "serde_repr",
  "sha2 0.11.1",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "uuid",
  "zeroize",
 ]
@@ -1092,7 +1092,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -1117,7 +1117,7 @@ dependencies = [
  "serde",
  "ssh-cipher 0.3.0",
  "ssh-key 0.7.0-rc.11",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1133,7 +1133,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "tsify",
@@ -1160,7 +1160,7 @@ dependencies = [
  "bitwarden-state",
  "chrono",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
@@ -1172,7 +1172,7 @@ source = "git+https://github.com/bitwarden/sdk-internal.git?rev=fbd21679c1c3690c
 dependencies = [
  "bitwarden-error",
  "serde",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1186,7 +1186,7 @@ dependencies = [
  "bitwarden-core",
  "bitwarden-crypto",
  "bitwarden-state",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
@@ -1208,7 +1208,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_bytes",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "uuid",
@@ -1261,7 +1261,7 @@ dependencies = [
  "sha1",
  "sha2 0.11.1",
  "subtle",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2486,7 +2486,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2937,7 +2937,7 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5329,6 +5329,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 [[package]]
 name = "plico"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5345,6 +5346,7 @@ dependencies = [
 [[package]]
 name = "plico-desktop"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "image",
  "peniko",
@@ -5353,7 +5355,7 @@ dependencies = [
  "plico-renderer",
  "plico-runtime",
  "plico-shell",
- "plico-wgpu 0.3.2",
+ "plico-wgpu",
  "pollster 1.0.1",
  "serde",
  "serde_json",
@@ -5363,6 +5365,7 @@ dependencies = [
 [[package]]
 name = "plico-dev"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5375,6 +5378,7 @@ dependencies = [
 [[package]]
 name = "plico-macros"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5385,32 +5389,12 @@ dependencies = [
 [[package]]
 name = "plico-motion"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "plico",
  "serde",
  "serde_json",
  "slotmap",
-]
-
-[[package]]
-name = "plico-native"
-version = "0.3.2"
-dependencies = [
- "cairo-rs",
- "lru",
- "objc2 0.6.5",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-text",
- "pango",
- "pangocairo",
- "snafu",
- "tempfile",
- "unicode-bidi",
- "windows",
- "windows-core",
- "yeslogic-fontconfig-sys",
 ]
 
 [[package]]
@@ -5438,6 +5422,7 @@ dependencies = [
 [[package]]
 name = "plico-renderer"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5467,6 +5452,7 @@ dependencies = [
 [[package]]
 name = "plico-runtime"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "elsa",
  "kurbo",
@@ -5489,6 +5475,7 @@ dependencies = [
 [[package]]
 name = "plico-shell"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5509,7 +5496,7 @@ dependencies = [
  "parley",
  "peniko",
  "plico-renderer",
- "plico-wgpu 0.3.2",
+ "plico-wgpu",
  "pollster 1.0.1",
  "raw-window-handle",
  "rfd",
@@ -5527,6 +5514,7 @@ dependencies = [
 [[package]]
 name = "plico-wgpu"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -5539,7 +5527,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-quartz-core 0.3.2",
  "peniko",
- "plico-native 0.3.2",
+ "plico-native",
  "plico-renderer",
  "pollster 1.0.1",
  "raw-window-handle",
@@ -5548,26 +5536,6 @@ dependencies = [
  "tracing",
  "wgpu",
  "winit",
-]
-
-[[package]]
-name = "plico-wgpu"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
-dependencies = [
- "bytemuck",
- "kurbo",
- "libc",
- "lru",
- "naga",
- "peniko",
- "plico-native 0.3.2 (git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1)",
- "plico-renderer",
- "pollster 1.0.1",
- "resvg",
- "snafu",
- "tracing",
- "wgpu",
 ]
 
 [[package]]
@@ -5581,7 +5549,7 @@ dependencies = [
  "plico-dev",
  "plico-renderer",
  "plico-runtime",
- "plico-wgpu 0.3.2 (git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1)",
+ "plico-wgpu",
  "plicowarden-sdk",
  "pollster 1.0.1",
  "rfd",
@@ -6388,7 +6356,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6445,7 +6413,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6466,7 +6434,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -7426,10 +7394,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -8509,7 +8477,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
