@@ -77,7 +77,7 @@ impl plico_dev::App for Warden {
                 "g" | "G" => {
                     self.palette_modal.close();
                     self.settings_open = false;
-                    self.set_filter("Generator");
+                    self.open_generator();
                     return true;
                 }
                 "n" | "N" if self.authenticated && !self.busy => {
@@ -97,7 +97,7 @@ impl plico_dev::App for Warden {
         if key.phase == plico::KeyPhase::Down
             && !key.synthetic
             && key.modifiers.is_empty()
-            && !self.login_open
+            && !self.router.show(model::Page::Login)
             && !self.settings_open
             && self.editor.is_none()
             && !self.palette_modal.is_open()
@@ -125,7 +125,7 @@ impl plico_dev::App for Warden {
                 self.bulk_modal.close();
                 return true;
             }
-            if self.login_open {
+            if self.router.show(model::Page::Login) {
                 if self.environment_open {
                     self.environment_open = false;
                     return true;
@@ -189,6 +189,12 @@ impl PreviewConfig {
             app.selected = selected.clone();
         }
         match self.screen.as_str() {
+            "syncing" => {
+                app.authenticated = true;
+                app.account_email = "recipe@example.invalid".into();
+                app.busy = true;
+                app.login_progress.begin_sync();
+            }
             "accounts" => {
                 for server in ["https://one.example.invalid", "https://two.example.invalid"] {
                     let config = plicowarden_sdk::service::LoginRequest {
@@ -379,8 +385,8 @@ impl PreviewConfig {
                 app.settings_open = true;
                 app.settings_tab = "security".into();
             }
-            "login" => app.login_open = true,
-            "generator" => app.filter = "Generator".into(),
+            "login" => app.open_login(),
+            "generator" => app.open_generator(),
             "editor" => app.editor = Some(model::Editor::new()),
             _ => {}
         }

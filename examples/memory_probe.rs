@@ -75,12 +75,14 @@ fn main() -> Result<(), Error> {
             }));
         } else {
             source.view.0.settings_open = index % 3 == 1;
-            source.view.0.filter = if index % 3 == 2 {
-                "Generator"
+            let page = if index % 3 == 2 {
+                plicowarden::model::Page::Generator
             } else {
-                "All Items"
+                plicowarden::model::Page::Vault
+            };
+            if !source.view.0.router.show(page) {
+                source.view.0.router.replace(page);
             }
-            .into();
             source.request_rebuild();
         }
         clock.advance(Duration::from_millis(16)).unwrap();

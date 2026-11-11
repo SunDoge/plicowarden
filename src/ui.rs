@@ -1,6 +1,6 @@
 use crate::{
     icons,
-    model::{AppNotification, HostCommand, Item, NotificationKind, Warden},
+    model::{AppNotification, HostCommand, Item, NotificationKind, Page, Warden},
 };
 use plico::prelude::*;
 use plico::{BoxShadow, Input, Layout, SvgAsset};
@@ -197,6 +197,7 @@ fn nav(
     (plico::widgets::nav_entry(ui, label, selected).height(28.).min_height(28.).max_height(28.)
         .padding_x(8.).padding_y(3.).gap(7.).radius(8.)
         .border(0., EDGE).justify(Justify::Start).disabled(disabled).opacity(if disabled { 0.45 } else { 1. })
+        .color(INK)
         .background(Color::Literal(0xffffff)).background_alpha(if selected { 0.62 } else { 0. })
         .hover_background(Color::Literal(0xf1eef6)).transition(160) + |ui|
     {
@@ -212,6 +213,7 @@ fn nav(
 fn settings_nav(ui: &mut UiContext, icon: &str, label: &str, selected: bool) -> bool {
     (plico::widgets::nav_entry(ui, label, selected).height(30.).padding_x(10.).padding_y(4.)
         .gap(8.).radius(8.).justify(Justify::Start).border(0., EDGE)
+        .color(INK)
         .background(Color::Literal(0xebe8f1)).background_alpha(if selected { 1. } else { 0. })
         .hover_background(Color::Literal(0xf3f1f7)).transition(140) + |ui|
     {
@@ -239,6 +241,25 @@ fn sidebar_rows_height(rows: usize) -> f32 {
     } else {
         rows as f32 * 28. + (rows as f32 - 1.) * 4.
     }
+}
+
+const SIDEBAR_MOTION: std::time::Duration = std::time::Duration::from_millis(180);
+
+fn sidebar_ease_out(t: f32) -> f32 {
+    1. - (1. - t).powi(3)
+}
+
+#[derive(Clone, Copy)]
+struct VaultContentLayout {
+    hide_list: bool,
+    hide_detail: bool,
+    single: bool,
+    narrow: bool,
+    viewport_width: f32,
+    list_width: f32,
+    compact: bool,
+    content_route: u64,
+    content_transition: u16,
 }
 
 enum PaletteEntry {
@@ -356,16 +377,24 @@ fn flatten_folders(
 fn folder_row(ui: &mut UiContext, row: &FolderRow, selected: bool, disabled: bool) -> bool {
     (plico::widgets::nav_entry(ui, row.path.as_str(), selected).height(28.)
         .min_height(28.).max_height(28.)
-        .padding_left(10. + row.depth as f32 * 14.).padding_right(10.).padding_y(3.)
-        .gap(6.).radius(8.).border(0., EDGE).justify(Justify::Start).disabled(disabled)
+        .padding_left(8. + row.depth as f32 * 14.).padding_right(8.).padding_y(3.)
+        .gap(7.).radius(8.).border(0., EDGE).justify(Justify::Start).disabled(disabled)
+        // Plicowarden uses a quiet light selection face, so its foreground
+        // remains dark even while the navigation tree owns keyboard focus.
+        .color(INK)
         .background(Color::Literal(0xffffff)).background_alpha(if selected { 0.62 } else { 0. })
         .hover_background(Color::Literal(0xf1eef6)).transition(160) + |ui| {
-        if row.has_children {
-            glyph(ui, if row.open { "chevron-down" } else { "chevron" }, 10., MUTED);
-        } else {
-            column(ui).width(10.).end();
-        }
-        glyph(ui, "folder", 14., MUTED);
+        // Keep one leading icon lane, like MyGo. A disclosure chevron replaces
+        // the folder glyph for branches instead of inserting a second lane
+        // that indents every real folder relative to "No folder".
+        column(ui).width(16.).height(16.).shrink(0.)
+            .align(Align::Center).justify(Justify::Center) + |ui| {
+            if row.has_children {
+                glyph(ui, if row.open { "chevron-down" } else { "chevron" }, 10., MUTED);
+            } else {
+                glyph(ui, "folder", 14., MUTED);
+            }
+        };
         text(ui, &row.name).grow(1.).font_size(13).width(0.).min_width(0.).ellipsis(true);
         if row.count > 0 {
             text!(ui, "{}", row.count).font_size(12).color(MUTED);
@@ -460,7 +489,6 @@ impl Warden {
         // than squeezing a third column; at 640 the detail replaces the list.
         let narrow = viewport_width < 900.;
         let single = viewport_width < 640.;
-        let show_sidebar = if narrow { self.compact_sidebar } else { self.sidebar };
         let hide_list = single && self.compact_detail && !self.compact_sidebar;
         let hide_detail = single && !self.compact_detail && !self.compact_sidebar;
         let detail_visible = !single || (self.compact_detail && !self.compact_sidebar);
@@ -468,7 +496,7 @@ impl Warden {
             && detail_visible
             && !self.settings_open
             && self.editor.is_none()
-            && self.filter != "Generator")
+            && !self.router.show(Page::Generator))
             .then(|| {
                 self.items
                     .iter()
@@ -481,7 +509,7 @@ impl Warden {
             .background(Color::Literal(0xf2f2fa)) + |ui|
         {
             backdrop(ui);
-            if self.login_open {
+            if self.router.show(Page::Login) {
                 self.account(ui);
                 self.accounts_ui(ui);
                 if self.custom_titlebar {
@@ -518,7 +546,18 @@ impl Warden {
                             self.compact_sidebar = true;
                         }
                     } else if tool(ui, "sidebar", "Toggle sidebar", false) {
+                        let now = self.frame_time.now;
+                        let old_target = if self.sidebar { 1. } else { 0. };
+                        let current = self.sidebar_motion_started_at.map_or(old_target, |started| {
+                            let progress = (now.saturating_sub(started).as_secs_f32()
+                                / SIDEBAR_MOTION.as_secs_f32()).clamp(0., 1.);
+                            self.sidebar_motion_from
+                                + (old_target - self.sidebar_motion_from) * sidebar_ease_out(progress)
+                        });
                         self.sidebar = !self.sidebar;
+                        self.sidebar_motion_from = current;
+                        self.sidebar_motion_started_at = (!ui.display_preferences().reduce_motion)
+                            .then_some(now);
                     }
                     self.window_drag_region(ui, true);
                     if viewport_width >= 1000. {
@@ -584,97 +623,67 @@ impl Warden {
                                 self.settings_open = false;
                             }
                         } else if tool(ui, "login", "Connect account", false) {
-                            self.login_open = true;
+                            self.open_login();
                             self.notice.clear();
                         }
                     }
                 };
-                row(ui).width_percent(100.).height(0.).grow(1.)
-                    .gap(if show_sidebar { 8. } else { 0. }).transition(200) + |ui| {
+                row(ui).position(plico::Position::Relative).width_percent(100.).height(0.).grow(1.) + |ui| {
                     if narrow && self.compact_sidebar {
-                        self.sidebar_ui(ui, (viewport_width - 16.).max(1.), true, false);
+                        self.sidebar_ui(ui, (viewport_width - 16.).max(1.), true, false, false, 1.);
                     } else {
                         if !narrow {
-                            self.sidebar_ui(ui, if self.sidebar { navigation_width } else { 0. }, self.sidebar, false);
-                        }
-                        column(ui).width(0.).grow(1.).min_width(0.).height_percent(100.).gap(0) + |ui| {
-                            if self.bulk_mode && !self.settings_open {
-                                self.bulk_toolbar(ui, &visible);
-                            }
-                            row(ui).width_percent(100.).height(0.).grow(1.).gap(8) + |ui| {
-                                if !hide_list {
-                                    let width = if single { (viewport_width - 16.).max(1.) }
-                                        else if narrow { 300. } else { list_width };
-                                    self.item_list(ui, &visible, width);
-                                }
-                                if hide_detail {
-                                    column(ui).width(0.).grow(1.).end();
-                                } else {
-                                    column(ui).key(content_route).width(0.).grow(1.).min_width(0.)
-                                        .height_percent(100.).scroll_y(self.editor.is_none())
-                                        .padding_bottom(if self.editor.is_some() { 0. } else { 38. })
-                                        .transition(content_transition)
-                                        .gap(12).padding_x(16.).padding_top(0.) + |ui|
-                                    {
-                                        if self.editor.is_some() {
-                                            self.editor_ui(ui);
-                                        } else if self.filter == "Generator" {
-                                            self.generator_ui(ui);
-                                        } else if visible.is_empty() {
-                                            column(ui).width_percent(100.).height_percent(100.)
-                                                .align(Align::Center).justify(Justify::Center)
-                                                .padding_bottom(60.) + |ui| {
-                                            surface(ui).padding(32).gap(12) + |ui| {
-                                                let empty_vault = self.items.is_empty();
-                                                text(ui, if empty_vault { "Your vault is empty" } else { "No matching items" })
-                                                    .font_size(20).weight(650);
-                                                text(ui, if empty_vault {
-                                                    "Create your first item. It is encrypted before it leaves this device."
-                                                } else if self.authenticated {
-                                                    "Create an item, or change your search and filters."
-                                                } else {
-                                                    "Try a name, username or website."
-                                                }).color(MUTED).width_percent(100.);
-                                                if empty_vault && self.authenticated {
-                                                    if button(ui).icon(crate::icons::get("plus")).text("Add item")
-                                                        .primary().disabled(self.busy).clicked()
-                                                    {
-                                                        self.editor = Some(crate::model::Editor::new());
-                                                    }
-                                                } else {
-                                                    row(ui).gap(10.).wrap(true) + |ui| {
-                                                        if !self.query.is_empty()
-                                                            && button(ui).text("Clear search").ghost().clicked()
-                                                        {
-                                                            self.clear_search();
-                                                            ui.request_rebuild();
-                                                        }
-                                                        if self.filter != "All Items"
-                                                            && button(ui).text("Show all items").ghost().clicked()
-                                                        {
-                                                            self.set_filter("All Items");
-                                                        }
-                                                    };
-                                                }
-                                            };
-                                            };
-                                        } else if let Some(item) = self.items.iter()
-                                            .find(|i| i.id == self.selected).cloned()
-                                        {
-                                            self.detail(ui, &item, compact);
-                                        }
-                                        if copyable_error(ui, &self.error) {
-                                            self.commands.push(
-                                                crate::model::HostCommand::CopyError(self.error.clone()));
-                                        }
-                                        if !self.notice.is_empty() {
-                                            text(ui, &self.notice).font_size(13).color(MUTED)
-                                                .width_percent(100.);
-                                        }
-                                    };
-                                }
+                            let elapsed = self.sidebar_motion_started_at
+                                .map(|started| self.frame_time.now.saturating_sub(started));
+                            let active = !ui.display_preferences().reduce_motion
+                                && elapsed.is_some_and(|elapsed| elapsed < SIDEBAR_MOTION);
+                            let progress = elapsed.map_or(1., |elapsed| {
+                                (elapsed.as_secs_f32() / SIDEBAR_MOTION.as_secs_f32()).clamp(0., 1.)
+                            });
+                            let progress = sidebar_ease_out(progress);
+                            let target = if self.sidebar { 1. } else { 0. };
+                            let visibility = if ui.display_preferences().reduce_motion {
+                                target
+                            } else {
+                                self.sidebar_motion_from
+                                    + (target - self.sidebar_motion_from) * progress
                             };
-                        };
+                            if active {
+                                ui.request_rebuild_at(
+                                    self.frame_time.now
+                                        .saturating_add(std::time::Duration::from_millis(16)),
+                                );
+                            } else {
+                                self.sidebar_motion_started_at = None;
+                                self.sidebar_motion_from = target;
+                            }
+                            if self.sidebar || active {
+                                // Follow MyGo's sidebar motion: animate the width that participates
+                                // in layout, then slide a fixed-width panel through a clipped
+                                // viewport. The content therefore gains or loses room on every
+                                // frame instead of snapping to its final width and being visually
+                                // translated over the already-changed layout.
+                                let full_extent = navigation_width + 8.;
+                                let extent = full_extent * visibility;
+                                column(ui).position(plico::Position::Relative)
+                                    .width(extent).height_percent(100.).shrink(0.).clip(true) + |ui| {
+                                    column(ui).position(plico::Position::Relative)
+                                        .width(full_extent).height_percent(100.).shrink(0.)
+                                        .translate(extent - full_extent, 0.) + |ui| {
+                                        self.sidebar_ui(ui, navigation_width, self.sidebar, false, false, 1.);
+                                    };
+                                };
+                            }
+                            self.vault_content(ui, &visible, VaultContentLayout {
+                                hide_list, hide_detail, single, narrow, viewport_width, list_width,
+                                compact, content_route, content_transition,
+                            });
+                        } else {
+                            self.vault_content(ui, &visible, VaultContentLayout {
+                                hide_list, hide_detail, single, narrow, viewport_width, list_width,
+                                compact, content_route, content_transition,
+                            });
+                        }
                     }
                 };
             };
@@ -709,6 +718,91 @@ impl Warden {
             if self.custom_titlebar {
                 self.window_controls(ui);
             }
+        };
+    }
+    #[component]
+    #[rustfmt::skip]
+    fn vault_content(&mut self, ui: &mut UiContext, visible: &[Item], layout: VaultContentLayout) {
+        let VaultContentLayout { hide_list, hide_detail, single, narrow, viewport_width, list_width,
+            compact, content_route, content_transition } = layout;
+        column(ui).width(0.).grow(1.).min_width(0.).height_percent(100.)
+            .gap(0) + |ui| {
+            if self.bulk_mode && !self.settings_open {
+                self.bulk_toolbar(ui, visible);
+            }
+            row(ui).width_percent(100.).height(0.).grow(1.).gap(8) + |ui| {
+                if !hide_list {
+                    let width = if single { (viewport_width - 16.).max(1.) }
+                        else if narrow { 300. } else { list_width };
+                    self.item_list(ui, visible, width);
+                }
+                if hide_detail {
+                    column(ui).width(0.).grow(1.).end();
+                } else {
+                    column(ui).key(content_route).width(0.).grow(1.).min_width(0.)
+                        .height_percent(100.).scroll_y(self.editor.is_none())
+                        .padding_bottom(if self.editor.is_some() { 0. } else { 38. })
+                        .transition(content_transition)
+                        .gap(12).padding_x(16.).padding_top(0.) + |ui|
+                    {
+                        if self.editor.is_some() {
+                            self.editor_ui(ui);
+                        } else if self.router.show(Page::Generator) {
+                            self.generator_ui(ui);
+                        } else if visible.is_empty() {
+                            column(ui).width_percent(100.).height_percent(100.)
+                                .align(Align::Center).justify(Justify::Center)
+                                .padding_bottom(60.) + |ui| {
+                            surface(ui).padding(32).gap(12) + |ui| {
+                                let empty_vault = self.items.is_empty();
+                                text(ui, if empty_vault { "Your vault is empty" } else { "No matching items" })
+                                    .font_size(20).weight(650);
+                                text(ui, if empty_vault {
+                                    "Create your first item. It is encrypted before it leaves this device."
+                                } else if self.authenticated {
+                                    "Create an item, or change your search and filters."
+                                } else {
+                                    "Try a name, username or website."
+                                }).color(MUTED).width_percent(100.);
+                                if empty_vault && self.authenticated {
+                                    if button(ui).icon(crate::icons::get("plus")).text("Add item")
+                                        .primary().disabled(self.busy).clicked()
+                                    {
+                                        self.editor = Some(crate::model::Editor::new());
+                                    }
+                                } else {
+                                    row(ui).gap(10.).wrap(true) + |ui| {
+                                        if !self.query.is_empty()
+                                            && button(ui).text("Clear search").ghost().clicked()
+                                        {
+                                            self.clear_search();
+                                            ui.request_rebuild();
+                                        }
+                                        if self.filter != "All Items"
+                                            && button(ui).text("Show all items").ghost().clicked()
+                                        {
+                                            self.set_filter("All Items");
+                                        }
+                                    };
+                                }
+                            };
+                            };
+                        } else if let Some(item) = self.items.iter()
+                            .find(|i| i.id == self.selected).cloned()
+                        {
+                            self.detail(ui, &item, compact);
+                        }
+                        if copyable_error(ui, &self.error) {
+                            self.commands.push(
+                                crate::model::HostCommand::CopyError(self.error.clone()));
+                        }
+                        if !self.notice.is_empty() {
+                            text(ui, &self.notice).font_size(13).color(MUTED)
+                                .width_percent(100.);
+                        }
+                    };
+                }
+            };
         };
     }
     #[component]
@@ -801,10 +895,10 @@ impl Warden {
             });
             let sync_clicked = (button_base(ui, "Sync").width(26.).height(26.)
                 .min_width(26.).min_height(26.).max_width(26.).max_height(26.)
-                .shrink(0.).padding(6.).radius(8.).corner_smoothing(1.)
+                .shrink(0.).padding(5.).radius(8.).corner_smoothing(1.)
                 .border(0., EDGE).disabled(!self.authenticated || (self.busy && !syncing)) + |ui| {
                 if syncing {
-                    plico::widgets::spinner_sized(ui, 14.);
+                    plico::widgets::spinner_sized(ui, 16.);
                 } else {
                     glyph(ui, "sync", 14., ICON);
                 }
@@ -855,28 +949,27 @@ impl Warden {
     }
     #[component]
     #[rustfmt::skip]
-    fn sidebar_ui(&mut self, ui: &mut UiContext, width: f32, open: bool, top_reserved: bool) {
+    fn sidebar_ui(&mut self, ui: &mut UiContext, width: f32, interactive: bool,
+        top_reserved: bool, overlay: bool, visibility: f32) {
         let mut panel = column(ui).position(plico::Position::Relative).width(width).shrink(0.)
-            .height_percent(100.).padding(if open { 10. } else { 0. }).gap(4)
-            .radius(18.).corner_smoothing(1.).clip(true).opacity(if open { 1. } else { 0. })
-            .transition(200);
-        if open {
-            panel = panel
-                .background(Color::Panel)
-                .border(1., Color::Literal(0xe7e4ee))
-                .shadow(BoxShadow {
-                    offset_x: 0., offset_y: 8., blur: 24., spread: 0.,
-                    color: Color::Literal(0x241d36), opacity: 0.07,
-                });
+            .height_percent(100.).padding(0.).gap(0)
+            .radius(18.).corner_smoothing(1.).clip(true).opacity(visibility)
+            .translate(-16. * (1. - visibility), 0.)
+            .disabled(!interactive)
+            .background(Color::Panel)
+            .border(1., Color::Literal(0xe7e4ee))
+            .shadow(BoxShadow {
+                offset_x: 0., offset_y: 8., blur: 24., spread: 0.,
+                color: Color::Literal(0x241d36), opacity: 0.07,
+            });
+        if overlay {
+            panel = panel.absolute(0., 0.);
         }
         panel + |ui| {
-            if !open {
-                return;
-            }
             if top_reserved {
                 row(ui).width_percent(100.)
                     .height(if self.custom_titlebar { 44_f32.max((50. / self.zoom.factor()) as f32) } else { 40. })
-                    .shrink(0.).align(Align::Center).gap(10).padding_x(10) + |ui|
+                    .shrink(0.).align(Align::Center).gap(10).padding_x(20) + |ui|
                 {
                     if !self.custom_titlebar {
                         glyph(ui, "shield", 25., Color::Literal(0x68618d));
@@ -884,15 +977,18 @@ impl Warden {
                     }
                 };
             }
-            column(ui).width_percent(100.).height(0.).min_height(0.).grow(1.).shrink(1.).scroll_y(true).gap(4) + |ui| {
+            // The scroll port reaches the panel edge while its content keeps
+            // MyGO's 10-DIP inset. The overlay thumb therefore occupies the
+            // quiet outer lane instead of cutting through labels and counts.
+            column(ui).width_percent(100.).height(0.).min_height(0.).grow(1.).shrink(1.)
+                .scroll_y(true).padding(10.).gap(4) + |ui| {
                 let items_height = sidebar_rows_height(7);
                 if sidebar_section(ui, "Items", self.sidebar_items_open) {
                     self.sidebar_items_open = !self.sidebar_items_open;
                     ui.request_rebuild();
                 }
                 column(ui).width_percent(100.).height(if self.sidebar_items_open { items_height } else { 0. })
-                    .shrink(0.).clip(true).opacity(if self.sidebar_items_open { 1. } else { 0. })
-                    .transition(220).disabled(!self.sidebar_items_open).gap(4.) + |ui| {
+                    .shrink(0.).clip(true).disabled(!self.sidebar_items_open).gap(4.) + |ui| {
                     for (icon, label, kind) in [
                         ("grid", "All Items", ""),
                         ("star", "Favorites", "*"),
@@ -907,7 +1003,8 @@ impl Warden {
                                 || if kind == "*" { item.favorite } else { item.kind == kind })
                         }).count();
                         ui.keyed(label, |ui| {
-                            if nav(ui, icon, label, Some(count), self.filter == label,
+                            if nav(ui, icon, label, Some(count),
+                                self.router.show(Page::Vault) && self.filter == label,
                                 self.busy || self.editor.is_some()) {
                                 self.set_filter(label);
                             }
@@ -922,7 +1019,8 @@ impl Warden {
                             if archived { i.archived && !i.deleted } else { i.deleted }
                         }).count();
                         ui.keyed(label, |ui| {
-                            if nav(ui, icon, label, Some(count), self.filter == label,
+                            if nav(ui, icon, label, Some(count),
+                                self.router.show(Page::Vault) && self.filter == label,
                                 self.busy || self.editor.is_some()) {
                                 self.set_filter(label);
                             }
@@ -939,18 +1037,19 @@ impl Warden {
                     ui.request_rebuild();
                 }
                 column(ui).width_percent(100.).height(if self.sidebar_folders_open { folders_height } else { 0. })
-                    .shrink(0.).clip(true).opacity(if self.sidebar_folders_open { 1. } else { 0. })
-                    .transition(220).disabled(!self.sidebar_folders_open).gap(4.) + |ui| {
+                    .shrink(0.).clip(true).disabled(!self.sidebar_folders_open).gap(4.) + |ui| {
                     let unfiled = self.items.iter()
                         .filter(|item| item.folder.is_none() && !item.deleted && !item.archived).count();
-                    if nav(ui, "folder", "No folder", Some(unfiled), self.filter == "No folder",
+                    if nav(ui, "folder", "No folder", Some(unfiled),
+                        self.router.show(Page::Vault) && self.filter == "No folder",
                         self.busy || self.editor.is_some()) {
                         self.set_filter("No folder");
                     }
                     let mut toggle = None;
                     let mut choose = None;
                     for row in &folder_rows {
-                        let selected = self.filter == format!("path:{}", row.path);
+                        let selected = self.router.show(Page::Vault)
+                            && self.filter == format!("path:{}", row.path);
                         ui.keyed(crate::model::business_key(&row.path), |ui| {
                             if folder_row(ui, row, selected, self.busy || self.editor.is_some()) {
                                 choose = Some(row.path.clone());
@@ -987,52 +1086,54 @@ impl Warden {
                     ui.request_rebuild();
                 }
                 column(ui).width_percent(100.).height(if self.sidebar_utilities_open { utilities_height } else { 0. })
-                    .shrink(0.).clip(true).opacity(if self.sidebar_utilities_open { 1. } else { 0. })
-                    .transition(220).disabled(!self.sidebar_utilities_open).gap(4.) + |ui| {
+                    .shrink(0.).clip(true).disabled(!self.sidebar_utilities_open).gap(4.) + |ui| {
                     if nav(ui, "sync", "Import / Export", None, self.filter == "Import / Export",
                         self.busy || self.editor.is_some()) {
                         self.transfer_modal.open();
                     }
-                    if nav(ui, "clock", "One-time Codes", None, self.filter == "One-time Codes",
+                    if nav(ui, "clock", "One-time Codes", None,
+                        self.router.show(Page::Vault) && self.filter == "One-time Codes",
                         !self.authenticated || self.busy || self.editor.is_some()) {
                         self.set_filter("One-time Codes");
                     }
-                    if nav(ui, "sliders", "Generator", None, self.filter == "Generator",
+                    if nav(ui, "sliders", "Generator", None, self.router.show(Page::Generator),
                         self.busy || self.editor.is_some()) {
-                        self.set_filter("Generator");
+                        self.open_generator();
                     }
                 };
             };
-            if (button_base(ui, "Switch account").width_percent(100.).padding(8.).gap(10.)
-                .radius(14.).corner_smoothing(1.).border(1., Color::Literal(0xe7e4ee))
-                .background(Color::Panel).hover_background(Color::Literal(0xf3f1f7))
-                .shadow(BoxShadow {
-                    offset_x: 0., offset_y: 2., blur: 8., spread: 0.,
-                    color: Color::Literal(0x241d36), opacity: 0.06,
-                }).disabled(self.busy) + |ui| {
-                avatar(ui).fallback("A").size(34.).font_size(13).background(Color::Selection)
-                    .color(Color::Literal(0x1d4ed8));
-                column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
-                    text(
-                        ui,
-                        if self.authenticated { &self.account_email } else { "alex@example.com" },
-                    ).font_size(13).weight(600).width_percent(100.).ellipsis(true);
-                    let status = if self.offline {
-                        "Cached vault".to_owned()
-                    } else if let Some(synced) = self.last_sync_at {
-                        format!("Synced {}", relative_time(unix_seconds(), synced))
-                    } else if self.authenticated {
-                        "Encrypted vault".to_owned()
-                    } else {
-                        "Demo vault".to_owned()
+            column(ui).width_percent(100.).shrink(0.).padding_x(10.).padding_bottom(10.) + |ui| {
+                if (button_base(ui, "Switch account").width_percent(100.).padding(8.).gap(10.)
+                    .radius(14.).corner_smoothing(1.).border(1., Color::Literal(0xe7e4ee))
+                    .background(Color::Panel).hover_background(Color::Literal(0xf3f1f7))
+                    .shadow(BoxShadow {
+                        offset_x: 0., offset_y: 2., blur: 8., spread: 0.,
+                        color: Color::Literal(0x241d36), opacity: 0.06,
+                    }).disabled(self.busy) + |ui| {
+                    avatar(ui).fallback("A").size(34.).font_size(13).background(Color::Selection)
+                        .color(Color::Literal(0x1d4ed8));
+                    column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
+                        text(
+                            ui,
+                            if self.authenticated { &self.account_email } else { "alex@example.com" },
+                        ).font_size(13).weight(600).width_percent(100.).ellipsis(true);
+                        let status = if self.offline {
+                            "Cached vault".to_owned()
+                        } else if let Some(synced) = self.last_sync_at {
+                            format!("Synced {}", relative_time(unix_seconds(), synced))
+                        } else if self.authenticated {
+                            "Encrypted vault".to_owned()
+                        } else {
+                            "Demo vault".to_owned()
+                        };
+                        text(ui, &status).font_size(12).color(MUTED).width_percent(100.);
                     };
-                    text(ui, &status).font_size(12).color(MUTED).width_percent(100.);
-                };
-                glyph(ui, "chevron", 12., MUTED);
-            }).response.clicked()
-            {
-                self.accounts_modal.open();
-            }
+                    glyph(ui, "chevron", 12., MUTED);
+                }).response.clicked()
+                {
+                    self.accounts_modal.open();
+                }
+            };
         };
     }
     #[component]
@@ -1062,7 +1163,7 @@ impl Warden {
                     self.sort_by_type = !self.sort_by_type;
                 }
             };
-            if self.filter != "All Items" && self.filter != "Generator" {
+            if self.filter != "All Items" {
                 let label = self.filter.strip_prefix("path:").unwrap_or(&self.filter)
                     .split('/').filter(|part| !part.is_empty())
                     .collect::<Vec<_>>().join(" › ");
@@ -1367,7 +1468,7 @@ impl Warden {
                         self.editor = Some(crate::model::Editor::new());
                         self.settings_open = false;
                     }
-                    "Generator" => self.set_filter("Generator"),
+                    "Generator" => self.open_generator(),
                     "Settings" => self.settings_open = true,
                     "Sync now" => {
                         if self.authenticated {

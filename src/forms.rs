@@ -1,5 +1,5 @@
 use crate::{
-    model::{Editor, Warden, factor_id, multiline_field, secret_field},
+    model::{Editor, Page, Warden, factor_id, multiline_field, secret_field},
     ui::*,
 };
 use plico::prelude::*;
@@ -278,6 +278,12 @@ impl Warden {
                                 }
                             };
                             checkbox(ui, "Show master password", &mut self.login_show_password).disabled(self.busy);
+                            match self.region.as_str() {
+                                "us" | "eu" => {}
+                                _ => {
+                                    text!(ui, "Self-hosted: {}", self.server);
+                                }
+                            }
                             if button(ui).text(if self.busy {
                                     "Logging in…"
                                 } else if self.has_cached_account() { "Unlock" } else { "Sign in" })
@@ -428,7 +434,7 @@ impl Warden {
                     self.items = crate::model::demo_items();
                     self.selected = "github".into();
                     self.filter = "All Items".into();
-                    self.login_open = false;
+                    self.show_vault();
                     self.notice.clear();
                 }
             };
@@ -861,7 +867,7 @@ impl Warden {
         column(ui).width_percent(100.).gap(10).padding(12).radius(8.).background(Color::Control) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
                 text(ui, "Connection progress").font_size(13).weight(600).width(0.).grow(1.);
-                if !self.login_open
+                if !self.router.show(Page::Login)
                     && button(ui).text("Hide progress").ghost().height(28.).clicked()
                 {
                     hide = true;

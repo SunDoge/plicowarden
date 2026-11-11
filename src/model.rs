@@ -331,6 +331,18 @@ pub struct AppNotification {
     pub read: bool,
     pub approval_id: Option<u64>,
 }
+/// Pages that replace one another. Settings, the command palette and approval
+/// dialogs stay modal state above the current page. List filters stay on the vault.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, plico::Route)]
+pub enum Page {
+    #[default]
+    #[route(id = "vault", label = "Vault")]
+    Vault,
+    #[route(id = "generator", label = "Generator")]
+    Generator,
+    #[route(id = "login", label = "Log in")]
+    Login,
+}
 pub struct Warden {
     pub items: Vec<Item>,
     pub query: String,
@@ -349,6 +361,12 @@ pub struct Warden {
     pub bulk_confirm: Option<String>,
     pub bulk_modal: ModalState,
     pub sidebar: bool,
+    /// Start of the desktop sidebar's layout-width transition. The target is
+    /// `sidebar`; the clipped fixed-width panel follows the animated extent.
+    pub sidebar_motion_started_at: Option<std::time::Duration>,
+    /// Visibility sampled when the current transition started. Keeping this
+    /// explicit makes rapid direction reversals continuous instead of jumping.
+    pub sidebar_motion_from: f32,
     pub custom_titlebar: bool,
     pub titlebar_pressed: bool,
     pub reveal: bool,
@@ -358,7 +376,7 @@ pub struct Warden {
     pub security: crate::security::SecuritySettings,
     pub active_security: crate::security::SecuritySettings,
     pub security_saving: bool,
-    pub login_open: bool,
+    pub router: plico::Router<Page>,
     pub appearance: Appearance,
     pub zoom: plico_runtime::ZoomController,
     pub notice: String,
@@ -478,6 +496,8 @@ impl Default for Warden {
             bulk_confirm: None,
             bulk_modal: ModalState::default(),
             sidebar: true,
+            sidebar_motion_started_at: None,
+            sidebar_motion_from: 1.,
             custom_titlebar: !cfg!(target_os = "linux"),
             titlebar_pressed: false,
             reveal: false,
@@ -487,7 +507,7 @@ impl Default for Warden {
             security: Default::default(),
             active_security: Default::default(),
             security_saving: false,
-            login_open: false,
+            router: plico::Router::new(Page::Vault),
             appearance: Appearance::default(),
             zoom: Appearance::default().zoom_controller(),
             notice: String::new(),
@@ -862,6 +882,9 @@ impl Warden {
         self.search_matches = None;
     }
     pub fn set_filter(&mut self, filter: &str) {
+        if self.router.show(Page::Generator) {
+            self.router.go(Page::Vault);
+        }
         self.compact_sidebar = false;
         self.compact_detail = false;
         self.bulk_selected.clear();
@@ -872,6 +895,38 @@ impl Warden {
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.shown_password = None;
+    }
+    pub fn open_login(&mut self) {
+        self.router.go(Page::Login);
+    }
+    /// Show the vault, recording the previous page so Back can return to it.
+    pub fn show_vault(&mut self) {
+        if !self.router.show(Page::Vault) {
+            self.router.go(Page::Vault);
+        }
+    }
+    pub fn open_generator(&mut self) {
+        self.router.go(Page::Generator);
+        self.compact_sidebar = false;
+        self.compact_detail = false;
+        self.bulk_selected.clear();
+        self.filter = "All Items".into();
+        self.reveal = false;
+        self.reveal_history = false;
+        self.reveal_card_number = false;
+        self.history_ticket = None;
+        self.previous_passwords.clear();
+        self.shown_password = None;
+    }
+    /// Login finished or was dismissed. Return to the page that opened it.
+    pub fn close_login(&mut self) {
+        if self.router.show(Page::Login) {
+            if self.router.can_back() {
+                self.router.back();
+            } else {
+                self.router.replace(Page::Vault);
+            }
+        }
     }
     pub fn lock(&mut self) {
         self.commands.clear();
@@ -934,7 +989,7 @@ impl Warden {
         self.reveal_history = false;
         self.history_ticket = None;
         self.previous_passwords.clear();
-        self.login_open = true;
+        self.open_login();
         self.settings_open = false;
         self.settings_modal.close();
         self.folders_modal.close();
@@ -1149,7 +1204,7 @@ impl Warden {
                 has_totp: i.has_totp,
             })
             .collect();
-        self.login_open = false;
+        self.close_login();
         self.password.clear();
         self.otp.clear();
         self.factors.clear();
@@ -1178,7 +1233,8 @@ impl Warden {
                 snapshot.decrypt_failures
             );
         }
-        if !self.selected.is_empty() && self.editor.is_none() && self.filter != "Generator" {
+        if !self.selected.is_empty() && self.editor.is_none() && !self.router.show(Page::Generator)
+        {
             self.request(Request::Details(self.selected.clone()));
         }
     }
@@ -1352,7 +1408,7 @@ impl Warden {
         if matches!(&event.result, Ok(Reply::Locked)) {
             // The worker reports a timeout error before its mandatory lock.
             // Clearing that error here made failed sign-ins look like a silent reset.
-            let login_error = (self.login_open && !self.authenticated)
+            let login_error = (self.router.show(Page::Login) && !self.authenticated)
                 .then(|| std::mem::take(&mut self.error))
                 .filter(|error| !error.is_empty());
             let retry_password = login_error.as_ref().map(|_| self.password.take());
@@ -1386,7 +1442,7 @@ impl Warden {
                     return;
                 }
                 Ok(Reply::BackgroundLogin(LoginOutcome::TwoFactorRequired { providers })) => {
-                    self.login_open = true;
+                    self.open_login();
                     self.login_password_step = true;
                     self.login_progress.verification();
                     self.factor = providers
@@ -1439,7 +1495,7 @@ impl Warden {
                 self.busy = false;
                 self.pending = None;
                 self.error = error;
-                self.login_focus = self.login_open;
+                self.login_focus = self.router.show(Page::Login);
             }
             return;
         }
@@ -1462,7 +1518,7 @@ impl Warden {
                 } else {
                     error
                 };
-                self.login_focus = self.login_open;
+                self.login_focus = self.router.show(Page::Login);
                 self.save_in_flight = false;
             }
             Ok(reply) => match reply {

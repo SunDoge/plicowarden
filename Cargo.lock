@@ -5394,8 +5394,7 @@ dependencies = [
 
 [[package]]
 name = "plico-native"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "cairo-rs",
  "lru",
@@ -5417,6 +5416,7 @@ dependencies = [
 [[package]]
 name = "plico-native"
 version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
 dependencies = [
  "cairo-rs",
  "lru",
@@ -5526,26 +5526,6 @@ dependencies = [
 
 [[package]]
 name = "plico-wgpu"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
-dependencies = [
- "bytemuck",
- "kurbo",
- "libc",
- "lru",
- "naga",
- "peniko",
- "plico-native 0.3.1",
- "plico-renderer",
- "pollster 1.0.1",
- "resvg",
- "snafu",
- "tracing",
- "wgpu",
-]
-
-[[package]]
-name = "plico-wgpu"
 version = "0.3.2"
 dependencies = [
  "block2 0.6.2",
@@ -5571,6 +5551,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "plico-wgpu"
+version = "0.3.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+dependencies = [
+ "bytemuck",
+ "kurbo",
+ "libc",
+ "lru",
+ "naga",
+ "peniko",
+ "plico-native 0.3.2 (git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1)",
+ "plico-renderer",
+ "pollster 1.0.1",
+ "resvg",
+ "snafu",
+ "tracing",
+ "wgpu",
+]
+
+[[package]]
 name = "plicowarden"
 version = "0.1.0"
 dependencies = [
@@ -5581,7 +5581,7 @@ dependencies = [
  "plico-dev",
  "plico-renderer",
  "plico-runtime",
- "plico-wgpu 0.3.1",
+ "plico-wgpu 0.3.2 (git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1)",
  "plicowarden-sdk",
  "pollster 1.0.1",
  "rfd",

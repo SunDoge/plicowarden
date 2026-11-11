@@ -146,7 +146,9 @@ fn custom_window_buttons_dispatch_real_commands_on_vault_and_login() {
     use plico_renderer::{HostAction, WindowCommand};
     for login in [false, true] {
         let mut app = Warden::default();
-        app.login_open = login;
+        if login {
+            app.open_login();
+        }
         app.custom_titlebar = true;
         let mut ui = Driver::new(Host::new(app, false), 820, 640).unwrap();
         for (label, expected) in [

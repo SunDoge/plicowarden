@@ -102,9 +102,21 @@ fn csharp_settings_generator_and_cancelled_login_paths() {
     assert_eq!(ui.source.view.0.generated.len(), 24);
     assert_eq!(ui.source.view.0.history.len(), 2);
     click(&mut ui, "Connect account");
-    assert!(ui.source.view.0.login_open);
+    assert!(
+        ui.source
+            .view
+            .0
+            .router
+            .show(plicowarden::model::Page::Login)
+    );
     click(&mut ui, "Browse demo vault");
-    assert!(!ui.source.view.0.login_open);
+    assert!(
+        ui.source
+            .view
+            .0
+            .router
+            .show(plicowarden::model::Page::Vault)
+    );
     assert!(ui.source.view.0.generated.is_empty());
     assert_eq!(ui.source.view.0.visible().len(), 12);
 }
@@ -258,7 +270,7 @@ fn app_shortcuts_toggle_palette_settings_and_vault_actions() {
     assert!(app.on_key_event(&shortcut(",", primary)));
     assert!(!app.settings_open);
     assert!(app.on_key_event(&shortcut("g", primary)));
-    assert_eq!(app.filter, "Generator");
+    assert!(app.router.show(plicowarden::model::Page::Generator));
     app.authenticated = true;
     assert!(app.on_key_event(&shortcut("n", primary)));
     assert!(app.editor.is_some());
@@ -571,6 +583,85 @@ fn navigation_columns_follow_triwarden_widths_at_desktop_and_compact_sizes() {
 }
 
 #[test]
+fn desktop_sidebar_animates_layout_width_and_retains_its_exit() {
+    fn left(ui: &Driver<NativeApp<Warden>>, label: &str) -> f32 {
+        ui.snapshot()
+            .nodes
+            .iter()
+            .find(|node| node.label.as_deref() == Some(label))
+            .unwrap_or_else(|| panic!("missing {label}"))
+            .bounds[0]
+    }
+    fn detail_width(ui: &Driver<NativeApp<Warden>>) -> f32 {
+        ui.source
+            .adapter
+            .placed
+            .iter()
+            .filter(|node| node.scroll.scrollable[1])
+            .max_by(|a, b| a.rect[0].total_cmp(&b.rect[0]))
+            .map(|node| node.rect[2] - node.rect[0])
+            .expect("desktop detail scroll port")
+    }
+
+    let mut ui = Driver::new(NativeApp(Warden::default()), 1000, 720).unwrap();
+    let open_x = left(&ui, "Select GitHub");
+    let open_detail_width = detail_width(&ui);
+    click(&mut ui, "Toggle sidebar");
+    let close_start_x = left(&ui, "Select GitHub");
+    assert!(
+        (close_start_x - open_x).abs() <= 1.,
+        "animated layout width must not jump"
+    );
+    assert!(
+        ui.source.engine.wake_deadline().is_some(),
+        "application-authored presentation values need a rebuild deadline"
+    );
+    assert!(
+        ui.snapshot()
+            .nodes
+            .iter()
+            .any(|node| node.label.as_deref() == Some("All Items")),
+        "sidebar children stay mounted during exit"
+    );
+
+    ui.advance(std::time::Duration::from_millis(60)).unwrap();
+    let closing_x = left(&ui, "Select GitHub");
+    let closing_detail_width = detail_width(&ui);
+    assert!(closing_x < open_x, "content should move left during close");
+    assert!(
+        ui.snapshot()
+            .nodes
+            .iter()
+            .any(|node| node.label.as_deref() == Some("Copy username")),
+        "the detail column must remain mounted during sidebar motion"
+    );
+
+    ui.advance(std::time::Duration::from_millis(200)).unwrap();
+    let closed_x = left(&ui, "Select GitHub");
+    let closed_detail_width = detail_width(&ui);
+    assert!(closed_x < closing_x);
+    assert!(
+        open_detail_width < closing_detail_width && closing_detail_width < closed_detail_width,
+        "detail width must follow the animated sidebar width: open={open_detail_width}, \
+         moving={closing_detail_width}, closed={closed_detail_width}"
+    );
+
+    click(&mut ui, "Toggle sidebar");
+    let reverse_x = left(&ui, "Select GitHub");
+    assert!((reverse_x - closed_x).abs() <= 1., "opening must not jump");
+    assert!((detail_width(&ui) - closed_detail_width).abs() <= 1.);
+    ui.advance(std::time::Duration::from_millis(60)).unwrap();
+    let opening_detail_width = detail_width(&ui);
+    assert!(
+        open_detail_width < opening_detail_width && opening_detail_width < closed_detail_width,
+        "detail must shrink progressively while the sidebar opens"
+    );
+    ui.advance(std::time::Duration::from_millis(200)).unwrap();
+    assert!((left(&ui, "Select GitHub") - open_x).abs() <= 1.);
+    assert!((detail_width(&ui) - open_detail_width).abs() <= 1.);
+}
+
+#[test]
 fn overflowing_sidebar_accepts_wheel_scroll() {
     use plico_renderer::{
         FrameSource, GesturePhase, Modifiers, Point, UiEvent, WheelDeltaMode, WheelEvent,
@@ -660,6 +751,10 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
         assert!(ui.source.view.0.busy);
         assert_eq!(ui.source.view.0.pending, Some(ticket));
         assert_eq!(ui.source.view.0.login_stage, Some(stage));
+        // Production host events request a declaration rebuild. This test
+        // mutates the app directly, so make that boundary explicit while the
+        // spinner itself advances on retained presentation frames.
+        ui.source.request_rebuild();
         ui.execute(Command::Snapshot).unwrap();
         assert!(
             ui.source
@@ -707,6 +802,7 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
         ui.source.view.0.error.contains("Synthetic failure"),
         "the cleanup lock must preserve the login error"
     );
+    ui.source.request_rebuild();
     ui.execute(Command::Snapshot).unwrap();
     assert!(
         !ui.snapshot()
@@ -772,7 +868,6 @@ fn cached_detail(id: &str, name: &str) -> plicowarden_sdk::service::ItemDetails 
 fn cached_real_item_switch_does_not_flash_global_busy_or_loading_cards() {
     let mut app = Warden::default();
     app.authenticated = true;
-    app.login_open = false;
     let first = app.items[0].clone();
     let second = app.items[1].clone();
     app.detail_cache
@@ -843,7 +938,14 @@ fn account_picker_distinguishes_identical_emails_on_different_servers_and_shows_
         "Unlock account same@example.invalid on https://two.example.invalid",
     );
     assert_eq!(ui.source.view.0.server, "https://two.example.invalid");
-    assert!(ui.source.view.0.login_open && ui.source.view.0.login_password_step);
+    assert!(
+        ui.source
+            .view
+            .0
+            .router
+            .show(plicowarden::model::Page::Login)
+            && ui.source.view.0.login_password_step
+    );
     assert!(ui.source.view.0.password.is_empty());
     assert!(ui.source.view.0.has_cached_account());
     ui.advance(std::time::Duration::from_millis(250)).unwrap();

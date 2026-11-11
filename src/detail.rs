@@ -54,12 +54,25 @@ fn totp_countdown(ui: &mut UiContext, remaining: u32, fraction: f32) {
     };
 }
 
+fn request_countdown_update(ui: &mut UiContext, remaining: f32) {
+    if ui.display_preferences().reduce_motion {
+        let fractional = remaining.fract();
+        let wait = if fractional > 0.001 { fractional } else { 1. };
+        ui.request_rebuild_at(
+            ui.now()
+                .saturating_add(std::time::Duration::from_secs_f32(wait)),
+        );
+    } else {
+        ui.request_animation_frame();
+    }
+}
+
 fn demo_totp_remaining(ui: &mut UiContext, period: u32) -> (u32, f32) {
     let period = period.max(1);
     let now = ui.now();
     let elapsed = now.as_secs_f32() % period as f32;
     let remaining = (period as f32 - elapsed).max(0.);
-    ui.request_animation_frame();
+    request_countdown_update(ui, remaining);
     (remaining.ceil() as u32, remaining / period as f32)
 }
 
@@ -71,7 +84,7 @@ fn live_totp_remaining(
     let elapsed = ui.now().saturating_sub(received_at).as_secs_f32();
     let remaining = (code.valid_for as f32 - elapsed).max(0.);
     if remaining > 0. {
-        ui.request_animation_frame();
+        request_countdown_update(ui, remaining);
     }
     (
         remaining.ceil() as u32,

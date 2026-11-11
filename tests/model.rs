@@ -1,5 +1,5 @@
 use plicowarden::Warden;
-use plicowarden::model::{Editor, HostCommand};
+use plicowarden::model::{Editor, HostCommand, Page};
 use plicowarden_sdk::{
     Event, Reply, Request,
     service::{EditData, TotpCode, VaultSnapshot},
@@ -197,7 +197,7 @@ fn history_reply_is_scoped_to_selection_and_erased_on_filter_and_lock() {
 fn verification_guards_and_back_navigation_drop_pending_secrets() {
     use plicowarden_sdk::service::{TwoFactorOption, TwoFactorProviderId};
     let mut app = Warden::default();
-    app.login_open = true;
+    app.open_login();
     app.login_password_step = true;
     app.email = "synthetic@example.invalid".into();
     app.factors = vec![TwoFactorOption {
@@ -232,7 +232,7 @@ fn verification_guards_and_back_navigation_drop_pending_secrets() {
 #[test]
 fn login_error_and_timeout_keep_secret_for_retry_but_explicit_lock_erases_it() {
     let mut app = Warden::default();
-    app.login_open = true;
+    app.open_login();
     app.login_password_step = true;
     app.email = "test@example.invalid".into();
     app.password
@@ -425,10 +425,23 @@ fn unauthorized_background_sync_returns_to_sign_in() {
     }));
     app.expire_session();
     assert!(!app.authenticated);
-    assert!(app.login_open);
+    assert!(app.router.show(Page::Login));
     assert!(!app.login_password_step);
     assert_eq!(app.email, "user@example.invalid");
     assert!(app.notice.contains("Session expired"));
+}
+
+#[test]
+fn login_returns_to_the_page_that_opened_it() {
+    let mut app = Warden::default();
+    app.open_generator();
+    app.open_login();
+    assert!(app.router.show(Page::Login));
+    app.close_login();
+    assert!(app.router.show(Page::Generator));
+    app.set_filter("Favorites");
+    assert!(app.router.show(Page::Vault));
+    assert_eq!(app.filter, "Favorites");
 }
 
 #[test]

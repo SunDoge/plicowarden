@@ -200,16 +200,21 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
         before,
         "secondary text follows native contrast"
     );
-    fn shaders(nodes: &[plico::ViewNode]) -> usize {
+    fn fullscreen_shaders(nodes: &[plico::ViewNode]) -> usize {
         nodes
             .iter()
-            .map(|node| usize::from(node.kind == plico::Kind::Shader) + shaders(&node.children))
+            .map(|node| {
+                usize::from(
+                    node.kind == plico::Kind::Shader
+                        && matches!(node.style.width, Some(width) if width >= 1000.),
+                ) + fullscreen_shaders(&node.children)
+            })
             .sum()
     }
     assert_eq!(
-        shaders(&source.engine.snapshot()),
+        fullscreen_shaders(&source.engine.snapshot()),
         0,
-        "reduced transparency drops the pastel wash; the solid surfaces remain"
+        "reduced transparency drops the fullscreen pastel wash; analytic widgets remain"
     );
     assert!(!source.has_anim());
 }
