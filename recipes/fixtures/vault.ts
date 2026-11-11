@@ -1,5 +1,5 @@
 export interface VaultFixture {
-  screen: "accounts" | "folders" | "transfer" | "bulk" | "ssh-approval" | "vault" | "settings" | "security" | "login" | "editor" | "generator";
+  screen: "accounts" | "folders" | "transfer" | "bulk" | "ssh-approval" | "ssh-history" | "vault" | "settings" | "security" | "login" | "editor" | "generator" | "card" | "ssh-key" | "totp" | "fields" | "empty" | "notifications" | "many-folders";
   query: string;
   selected: string;
   filter: string;

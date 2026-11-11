@@ -13,6 +13,7 @@ export default suite(viewports.flatMap(viewport => [
     capture("destination"), click(button("Move selected items")),
   ]}),
   recipe(`unfiled-${viewport.name}`, { state: demoVault({ screen: "folders" }), viewport, steps: [
+    ...(viewport.name === "compact" ? [click(button("Toggle sidebar"))] : []),
     click(button("No folder")), expect(button("Select GitHub")).absent(), expect(button("Select Linear")).exists(), capture("unfiled"),
   ]}),
 ]));

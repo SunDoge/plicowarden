@@ -35,9 +35,9 @@ fn region_selector(ui: &mut UiContext, selected: &mut usize, disabled: bool) {
             ui.keyed(index as u64, |ui| {
                 let control = button(ui).text(*label).height(30.).padding_x(8).radius(6.).font_size(13);
                 let control = if *selected == index {
-                    control.background(Color::Panel).border(1., EDGE).elevation(Elevation::SUBTLE)
+                    control.background(Color::Panel).border(1., EDGE)
                 } else {
-                    control.ghost().background_alpha(0.)
+                    control.ghost()
                 };
                 if control.disabled(disabled).clicked() {
                     *selected = index;
@@ -59,8 +59,17 @@ fn edit_field(ui: &mut UiContext, draft: &mut Editor, key: &str, label: &str) {
     let multiline = multiline_field(key);
     let buffer = draft.buffer(key, secret, multiline);
     column(ui).width_percent(100.).gap(7) + |ui| {
-        text(ui, label).font_size(13).weight(600).color(MUTED);
-        text_input(ui, label, &buffer).width_percent(100.).height(if multiline {
+        text(ui, label).font_size(12).weight(600).color(MUTED);
+        let hint = match key {
+            "name" => "e.g. GitHub",
+            "username" => "name@example.com",
+            "password" => "Enter a password",
+            "uris" => "https://example.com",
+            "totp" => "Setup key or otpauth:// URI",
+            "notes" => "Add a note",
+            _ => "",
+        };
+        field_input(text_input(ui, label, &buffer).placeholder(hint)).width_percent(100.).height(if multiline {
             if key == "notes" || key == "privateKey" { 120. } else { 80. }
         } else {
             36.
@@ -111,12 +120,41 @@ pub fn kind_fields(kind: &str) -> &'static [(&'static str, &'static str)] {
         _ => &[],
     }
 }
+#[component]
+#[rustfmt::skip]
+fn login_brand(ui: &mut UiContext, width: f32) {
+    column(ui).width(width.clamp(280., 560.)).height_percent(100.).shrink(0.)
+        .padding_x(40.).padding_top(64.).padding_bottom(40.)
+        .justify(Justify::Center).background(Color::Panel) + |ui| {
+        glyph(ui, "shield", 44., Color::Accent);
+        column(ui).gap(4.).padding_top(28.) + |ui| {
+            text(ui, "Plicowarden").font_size(20).weight(700);
+            text(ui, "Every login,").font_size(30).weight(750);
+            text(ui, "behind one door.").font_size(30).weight(750);
+        };
+        column(ui).gap(12.).padding_top(28.) + |ui| {
+            for (icon, label) in [
+                ("lock", "Passwords and passkeys, filled in anywhere"),
+                ("clock", "One-time codes, one click away"),
+                ("terminal", "SSH keys that sign without leaving the vault"),
+            ] {
+                ui.keyed(label, |ui| {
+                    row(ui).gap(10.).align(Align::Center) + |ui| {
+                        glyph(ui, icon, 16., MUTED);
+                        text(ui, label).font_size(13).color(MUTED);
+                    };
+                });
+            }
+        };
+    };
+}
+
 impl Warden {
     #[component]
     #[rustfmt::skip]
     pub fn account(&mut self, ui: &mut UiContext) {
         let width = (ui.viewport_width() - 48.).clamp(240., 432.);
-        let top = if ui.viewport_size()[1] < 760. { 32 } else { 64 };
+        let top = if ui.viewport_size()[1] < 760. { 24 } else { 48 };
         let focus = std::mem::take(&mut self.login_focus);
         // Login identity persists across launches (the host's persisted
         // state file): the remembered email, the chosen region and the
@@ -141,80 +179,120 @@ impl Warden {
             if self.api_url.is_empty() && self.identity_url.is_empty() && self.icons_url.is_empty() {
                 (self.api_url, self.identity_url, self.icons_url) = advanced_urls.read().clone();
             }
-            // Write back what the user changed this frame; set() only settles
-            // the frame when a value actually differs.
-            remembered_email.set(self.email.clone());
-            region.set(self.region.clone());
-            server.set(self.server.clone());
-            advanced_urls.set((
-                self.api_url.clone(),
-                self.identity_url.clone(),
-                self.icons_url.clone(),
-            ));
+            // Persist only real changes. Writing the same value every frame
+            // rebuilds the login view and drops an input selection (Ctrl+A)
+            // between a focus and the following edit key.
+            if self.persist_login_email {
+                remembered_email.set(self.email.clone());
+                self.persist_login_email = false;
+            }
+            if self.persist_login_settings {
+                region.set(self.region.clone());
+                server.set(self.server.clone());
+                advanced_urls.set((
+                    self.api_url.clone(),
+                    self.identity_url.clone(),
+                    self.icons_url.clone(),
+                ));
+                self.persist_login_settings = false;
+            }
         }
-        column(ui).width_percent(100.).height_percent(100.).align(Align::Center).padding(24).padding_top(top).gap(24)
-            .scroll_y(true) + |ui|
-        {
-            row(ui).gap(10).align(Align::Center) + |ui| {
-                glyph(ui, "shield", 24., Color::Accent);
-                text(ui, "Plicowarden").font_size(22).weight(700).color(INK);
-            };
-            column(ui).width(width).gap(24).padding_top(24).padding_bottom(24) + |ui| {
-                column(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
-                    glyph(ui, if self.login_password_step { "key" } else { "shield" }, 40., Color::Accent);
+        let split = ui.viewport_width() >= 900.;
+        row(ui).width_percent(100.).height_percent(100.) + |ui| {
+            if split {
+                login_brand(ui, ui.viewport_width() * 0.44);
+                column(ui).width(1.).height_percent(100.).shrink(0.)
+                    .background(Color::Literal(0xe7e4ee));
+            }
+            column(ui).position(plico::Position::Relative).width(0.).grow(1.).height_percent(100.)
+                .align(Align::Center).justify(Justify::Center).padding(24)
+                .padding_top(if split { 40. } else { top as f32 }).gap(20)
+                .background(Color::Literal(0xfbfafd)).background_alpha(if split { 1. } else { 0. })
+                .scroll_y(true) + |ui|
+            {
+                if !split {
+                    row(ui).gap(10).align(Align::Center) + |ui| {
+                        glyph(ui, "shield", 24., Color::Accent);
+                        text(ui, "Plicowarden").font_size(20).weight(700).color(INK);
+                    };
+                }
+                column(ui).width(width).gap(16).padding_bottom(24) + |ui| {
+                column(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                    glyph(ui, if self.login_password_step { "key" } else { "shield" }, 32., Color::Accent);
                     text(
                         ui,
                         if !self.factors.is_empty() {
                             "Verify your identity"
-                        } else if self.login_password_step {
-                            "Welcome back"
                         } else {
-                            "Log in to your vault"
+                            "Welcome back"
                         },
-                    ).font_size(28).weight(700).color(INK);
+                    ).font_size(24).weight(700).color(INK);
                     if self.login_password_step {
                         text(ui, &self.email).font_size(14).color(MUTED);
+                    } else if self.factors.is_empty() {
+                        text(ui, "Sign in to your Plicowarden vault.").font_size(13).color(MUTED);
                     }
                 };
-                surface(ui).width_percent(100.).padding(28).gap(18) + |ui| {
+                surface(ui).width_percent(100.).padding(24).gap(16) + |ui| {
                     if self.factors.is_empty() {
                         if !self.login_password_step {
+                            row(ui).width_percent(100.).gap(6).align(Align::Center) + |ui| {
+                                text(ui, "Server").font_size(12).color(MUTED);
+                                let label = match self.region.as_str() {
+                                    "us" => "bitwarden.com",
+                                    "eu" => "bitwarden.eu",
+                                    _ => "Self-hosted server",
+                                };
+                                if button(ui).icon(crate::icons::get("external")).text(label).ghost()
+                                    .color(Color::Accent).disabled(self.busy).clicked()
+                                {
+                                    self.environment_open = !self.environment_open;
+                                    self.environment_error.clear();
+                                }
+                            };
                             column(ui).width_percent(100.).gap(8) + |ui| {
                                 text(ui, "Email address").font_size(14).weight(600).color(INK);
-                                let submitted = text_input_string(ui, "Email address", &mut self.email).autofocus(true).request_focus(focus).placeholder("you@example.com")
-                                    .height(42.).width_percent(100.).disabled(self.busy).response()
-                                    .submitted;
+                                let submitted = field_input(text_input_string(ui, "Email address", &mut self.email))
+                                    .autofocus(true).request_focus(focus).placeholder("you@example.com")
+                                    .width_percent(100.).disabled(self.busy).response().submitted;
                                 if submitted {
                                     self.continue_login();
                                 }
                             };
-                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("arrow-right")).text("Continue").primary()
-                                .height(42.).width_percent(100.)
-                                .disabled(self.busy || self.email.trim().is_empty()).clicked()
+                            if button(ui).text("Continue").primary()
+                                .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .width_percent(100.).disabled(self.busy || self.email.trim().is_empty())
+                                .clicked()
                             {
                                 self.continue_login();
                             }
                         } else {
                             column(ui).width_percent(100.).gap(8) + |ui| {
                                 text(ui, "Master password").font_size(14).weight(600).color(INK);
-                                let submitted = text_input(ui, "Master password", &self.password).autofocus(true).request_focus(focus)
-                                    .password_visible(self.login_show_password).height(42.)
-                                    .width_percent(100.).disabled(self.busy).response().submitted;
+                                let submitted = field_input(text_input(ui, "Master password", &self.password))
+                                    .autofocus(true).request_focus(focus)
+                                    .password_visible(self.login_show_password).width_percent(100.)
+                                    .disabled(self.busy).response().submitted;
                                 if submitted {
                                     self.login();
                                 }
                             };
                             checkbox(ui, "Show master password", &mut self.login_show_password).disabled(self.busy);
-                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("login"))
-                                .text(if self.busy { "Logging in…" } else if self.has_cached_account() {"Unlock"} else { "Sign in" }).primary()
-                                .height(42.).width_percent(100.)
+                            if button(ui).text(if self.busy {
+                                    "Logging in…"
+                                } else if self.has_cached_account() { "Unlock" } else { "Sign in" })
+                                .primary().radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .width_percent(100.)
                                 .disabled(self.busy || self.password.is_empty()).clicked()
                             {
                                 self.login();
                             }
-                            if (self.has_cached_account() || !self.error.is_empty()) && button(ui).text("Connect to server instead").ghost().width_percent(100.).disabled(self.busy || self.password.is_empty()).clicked() {self.reconnect();}
+                            if (self.has_cached_account() || !self.error.is_empty())
+                                && button(ui).text("Connect to server instead").ghost().width_percent(100.)
+                                    .disabled(self.busy || self.password.is_empty()).clicked()
+                            {
+                                self.reconnect();
+                            }
                         }
                     } else {
                         let previous = self.factor.clone();
@@ -237,13 +315,11 @@ impl Warden {
                         }
                         if supported {
                             text(ui, "Verification code").font_size(14).weight(600).color(INK);
-                            let submitted =
-                                text_input(ui, "Verification code", &self.otp).autofocus(true)
-                                    .request_focus(focus).height(42.).width_percent(100.)
-                                    .disabled(self.busy).response().submitted;
-                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("check"))
-                                .text(if self.busy { "Verifying…" } else { "Verify" }).primary().height(42.)
+                            let submitted = field_input(text_input(ui, "Verification code", &self.otp))
+                                .autofocus(true).request_focus(focus).width_percent(100.)
+                                .disabled(self.busy).response().submitted;
+                            if button(ui).text(if self.busy { "Verifying…" } else { "Verify" }).primary()
+                                .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .width_percent(100.).disabled(self.busy || self.otp.is_empty()).clicked()
                                 || submitted
                             {
@@ -254,22 +330,20 @@ impl Warden {
                                 .color(Color::Warning).width_percent(100.);
                         }
                         if self.factor == "email"
-                            && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("mail")).text("Send email code").ghost()
-                                .background_alpha(0.).disabled(self.busy).clicked()
+                            && button(ui).icon(crate::icons::get("mail")).text("Send email code").ghost()
+                                .disabled(self.busy).clicked()
                         {
                             self.request(Request::SendEmail);
                         }
                     }
                     self.login_progress_ui(ui);
                     if self.busy && self.region == "self-hosted" {
-                            text(ui, &self.server).color(MUTED).font_size(12).width_percent(100.)
-                                .ellipsis(true);
+                        text(ui, &self.server).color(MUTED).font_size(12).width_percent(100.)
+                            .ellipsis(true);
                     }
                     if self.busy
-                        && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                            .icon(crate::icons::get("close")).text("Cancel sign-in").ghost()
-                            .background_alpha(0.).clicked()
+                        && button(ui).icon(crate::icons::get("close")).text("Cancel sign-in").ghost()
+                            .clicked()
                     {
                         self.lock();
                         self.notice = "Sign-in cancelled.".into();
@@ -282,31 +356,13 @@ impl Warden {
                     }
                     if (self.login_password_step || !self.factors.is_empty())
                         && !self.busy
-                        && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                            .icon(crate::icons::get("arrow-left")).text("Back").width_percent(100.)
-                            .height(40.).clicked()
+                        && button(ui).text("Back").width_percent(100.)
+                            .height(32.).clicked()
                     {
                         self.back_to_email();
                     }
                 };
-                if !self.login_password_step && self.factors.is_empty() {
-                    column(ui).width_percent(100.).gap(12).align(Align::Center) + |ui| {
-                        row(ui).gap(4).align(Align::Center) + |ui| {
-                            text(ui, "Accessing:").font_size(13).color(MUTED);
-                            let label = match self.region.as_str() {
-                                "us" => "bitwarden.com",
-                                "eu" => "bitwarden.eu",
-                                _ => "Self-hosted server",
-                            };
-                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("external")).text(label).ghost()
-                                .background_alpha(0.).color(Color::Accent).disabled(self.busy).clicked()
-                            {
-                                self.environment_open = !self.environment_open;
-                                self.environment_error.clear();
-                            }
-                        };
-                        if self.environment_open {
+                if !self.login_password_step && self.factors.is_empty() && self.environment_open {
                             surface(ui).padding(20).gap(12) + |ui| {
                                 text(ui, "Server").font_size(16).weight(650);
                                 let mut region = match self.region.as_str() {
@@ -324,8 +380,9 @@ impl Warden {
                                     [region.min(2)].into();
                                 if self.region == "self-hosted" {
                                     text(ui, "Server URL").font_size(13).weight(600);
-                                    text_input_string(ui, "Server URL", &mut self.server).placeholder("https://vault.example.com").width_percent(100.)
-                                        .disabled(self.busy);
+                                    field_input(text_input_string(ui, "Server URL", &mut self.server)
+                                        .placeholder("https://vault.example.com"))
+                                        .width_percent(100.).disabled(self.busy);
                                     checkbox(ui, "Custom service endpoints", &mut self.advanced);
                                     if self.advanced {
                                         for (label, value) in [
@@ -349,20 +406,22 @@ impl Warden {
                                             self.environment_error.clone()),
                                     );
                                 }
-                                if button(ui).radius(6.).corner_smoothing(1.)
-                                    .elevation(Elevation::CONTROL).icon(crate::icons::get("check"))
-                                    .text("Done").width_percent(100.).clicked()
+                                if button(ui).radius(6.).icon(crate::icons::get("check")).text("Done")
+                                    .width_percent(100.).clicked()
                                     && self.validate_login_server()
                                 {
+                                    self.persist_login_settings = true;
                                     self.environment_open = false;
                                 }
                             };
-                        }
-                    };
                 }
-                if !self.saved_accounts.is_empty() && button(ui).text("Switch account").ghost().width_percent(100.).disabled(self.busy).clicked() {self.accounts_modal.open();}
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("grid")).text("Browse demo vault").ghost().background_alpha(0.)
+                if !self.saved_accounts.is_empty()
+                    && button(ui).text("Switch account").ghost().width_percent(100.).disabled(self.busy)
+                        .clicked()
+                {
+                    self.accounts_modal.open();
+                }
+                if button(ui).icon(crate::icons::get("grid")).text("Browse demo vault").ghost()
                     .width_percent(100.).disabled(self.busy).clicked()
                 {
                     self.lock();
@@ -373,36 +432,71 @@ impl Warden {
                     self.notice.clear();
                 }
             };
+            };
         };
     }
     #[component]
     #[rustfmt::skip]
     pub fn accounts_ui(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.accounts_modal);
-        modal(ui,&mut state).title("Accounts").width(520.).children(|ui| {
+        modal(ui, &mut state).title("Accounts").width(520.).children(|ui| {
+            text(ui, "Saved accounts stay encrypted on this device.")
+                .font_size(12).color(MUTED).width_percent(100.);
+            if self.saved_accounts.is_empty() {
+                surface(ui).padding(18.).gap(4.) + |ui| {
+                    text(ui, "No saved accounts").font_size(14).weight(600);
+                    text(ui, "Add an account to unlock it without signing in again.")
+                        .font_size(12).color(MUTED).width_percent(100.);
+                };
+            }
             for account in self.saved_accounts.clone() {
                 let server = account.config.server_url.as_deref().unwrap_or(&account.config.region);
-                let label = format!("Unlock account {} on {}",account.config.email,server);
+                let current = self.active_account_id.as_deref() == Some(account.id.as_str());
+                let initial = account.config.email.chars().next()
+                    .map(|c| c.to_uppercase().next().unwrap_or(c)).unwrap_or('A').to_string();
+                let label = format!("Unlock account {} on {}", account.config.email, server);
                 ui.keyed(crate::model::business_key(&account.id), |ui| {
-                row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
-                    if plico::widgets::nav_entry(ui, label, self.active_account_id.as_deref()==Some(account.id.as_str()))
-                        .width(0.).grow(1.).height(58.).disabled(self.busy).children(|ui| {
-                            column(ui).width_percent(100.).min_width(0.).gap(4) + |ui| {
-                                text(ui,&account.config.email).font_size(14).weight(600).color(INK).width_percent(100.).ellipsis(true);
-                                text(ui,server).font_size(12).color(MUTED).width_percent(100.).ellipsis(true);
+                    row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                        if plico::widgets::nav_entry(ui, label, current)
+                            .width(0.).grow(1.).height(64.).disabled(self.busy).children(|ui| {
+                            row(ui).width_percent(100.).align(Align::Center).gap(10.) + |ui| {
+                                avatar(ui).fallback(&initial).size(32.).font_size(12)
+                                    .background(Color::Selection).color(Color::Literal(0x1d4ed8));
+                                column(ui).width(0.).grow(1.).min_width(0.).gap(3.) + |ui| {
+                                    text(ui, &account.config.email).font_size(14).weight(600).color(INK)
+                                        .width_percent(100.).ellipsis(true);
+                                    text(ui, server).font_size(12).color(MUTED).width_percent(100.)
+                                        .ellipsis(true);
+                                };
+                                if current {
+                                    row(ui).padding_x(7.).padding_y(3.).radius(10.)
+                                        .corner_smoothing(0.).border(1., Color::Border) + |ui| {
+                                        text(ui, "Current").font_size(10).weight(600).color(MUTED);
+                                    };
+                                }
                             };
-                        }).response.clicked() {
-                        self.choose_account(&account);
-                        ui.close_modal();
-                    }
-                    if button(ui).icon(crate::icons::get("trash")).text("Forget").aria_label(format!("Forget account {} on {}",account.config.email,server)).ghost().disabled(self.busy).clicked() {
-                        self.request(Request::ForgetAccount(account.id.clone()));
-                        ui.close_modal();
-                    }
-                };
+                        }).response.clicked()
+                        {
+                            self.choose_account(&account);
+                            ui.close_modal();
+                        }
+                        if button(ui).icon(crate::icons::get("trash")).text("Forget").aria_label(format!(
+                            "Forget account {} on {}",
+                            account.config.email, server
+                        )).ghost().disabled(self.busy).clicked()
+                        {
+                            self.request(Request::ForgetAccount(account.id.clone()));
+                            ui.close_modal();
+                        }
+                    };
                 });
             }
-            if button(ui).icon(crate::icons::get("plus")).text("Add account").width_percent(100.).disabled(self.busy).clicked() {self.add_account();ui.close_modal();}
+            if button(ui).icon(crate::icons::get("plus")).text("Add account").width_percent(100.)
+                .disabled(self.busy).clicked()
+            {
+                self.add_account();
+                ui.close_modal();
+            }
         });
         self.accounts_modal = state;
     }
@@ -414,142 +508,150 @@ impl Warden {
         };
         let mut cancel = false;
         let mut save = false;
-        surface(ui).padding(24).gap(20) + |ui| {
+        column(ui).width_percent(100.).height_percent(100.).gap(0.) + |ui| {
+            column(ui).width_percent(100.).height(0.).grow(1.).min_height(0.).scroll_y(true)
+                .padding_bottom(20.) + |ui| {
+            column(ui).width_percent(100.).gap(16.) + |ui| {
             row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center).gap(12) + |ui| {
                 column(ui).gap(5).width(0.).grow(1.) + |ui| {
                     text(ui, if draft.id.is_none() { "New item" } else { "Edit item" }).font_size(26).weight(700);
                     text(ui, "Changes are encrypted before they leave this device.").font_size(13)
                         .color(MUTED).width_percent(100.);
                 };
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("close")).text("Cancel editing").ghost().background_alpha(0.)
+                if button(ui).icon(crate::icons::get("close")).text("Cancel editing").ghost()
                     .disabled(self.busy).clicked()
                 {
                     cancel = true;
                 }
             };
-            if draft.id.is_none() {
-                let before = draft.kind.clone();
-                picker(
-                    ui,
-                    "Item type",
-                    &mut draft.kind,
-                    self.popups.entry("kind".into()).or_default(),
-                    &entries(&[
-                        ("login", "Login"),
-                        ("note", "Secure note"),
-                        ("card", "Card"),
-                        ("identity", "Identity"),
-                        ("ssh-key", "SSH key"),
-                    ]),
-                );
-                if before != draft.kind {
-                    draft.fields.retain(|k, _| k == "name" || k == "notes");
-                }
-            }
-            ui.keyed("name", |ui| edit_field(ui, &mut draft, "name", "Item name"));
-            row(ui).gap(12).width_percent(100.).align(Align::Center) + |ui| {
-                checkbox(ui, "Favorite", &mut draft.favorite);
-                let mut folders = vec![(String::new(), "No folder".into())];
-                folders.extend(self.folders.iter().map(|f| (f.id.clone(), f.name.clone())));
-                picker(ui, "Folder", &mut draft.folder, self.popups.entry("folder".into()).or_default(),
-                    &folders);
-            };
-            for &(key, label) in kind_fields(&draft.kind) {
-                ui.keyed(key, |ui| edit_field(ui, &mut draft, key, label));
-            }
-            if draft.kind == "login"
-                && button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("sync")).text("Generate a strong password").ghost().background_alpha(0.)
-                    .disabled(self.busy).clicked()
-            {
-                match crate::generator::generate(24, true) {
-                    Ok(value) => draft.buffer("password", true, false).set(value),
-                    Err(error) => self.error = error.to_string(),
-                }
-            }
-            ui.keyed("notes", |ui| edit_field(ui, &mut draft, "notes", "Notes"));
-            row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center) + |ui| {
-                text(ui, "Custom fields").weight(650);
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("plus")).text("Add custom field").ghost().background_alpha(0.)
-                    .clicked()
-                {
-                    draft.custom.push(plicowarden_sdk::FieldView {
-                        name: Some(String::new()),
-                        value: Some(String::new()),
-                        r#type: plicowarden_sdk::FieldType::Text,
-                        linked_id: None,
-                    });
-                    draft.custom_keys.push(draft.next_custom_key);
-                    draft.next_custom_key += 1;
-                }
-            };
-            let mut remove = None;
-            for (index, field) in draft.custom.iter_mut().enumerate() {
-                let key = draft.custom_keys[index];
-                ui.keyed(key, |ui| {
-                    // Linked fields must survive untouched; they are not free-form text.
-                    let kind = serde_json::to_value(field.r#type).ok().and_then(|v| v.as_u64()).unwrap_or(0);
-                    if kind == 3 {
-                        text(ui, field.name.as_deref().unwrap_or("Linked field")).color(MUTED);
-                        return;
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                text(ui, "Item").font_size(13).weight(650);
+                if draft.id.is_none() {
+                    let before = draft.kind.clone();
+                    picker(
+                        ui,
+                        "Item type",
+                        &mut draft.kind,
+                        self.popups.entry("kind".into()).or_default(),
+                        &entries(&[
+                            ("login", "Login"),
+                            ("note", "Secure note"),
+                            ("card", "Card"),
+                            ("identity", "Identity"),
+                            ("ssh-key", "SSH key"),
+                        ]),
+                    );
+                    if before != draft.kind {
+                        draft.fields.retain(|k, _| k == "name" || k == "notes");
                     }
-                    row(ui).width_percent(100.).gap(8).wrap(true).align(Align::Center) + |ui| {
-                        let name = field.name.get_or_insert_with(String::new);
-                        text_input_string(ui, "Field name", name).width(160.).grow(1.);
-                        let value = field.value.get_or_insert_with(String::new);
-                        if kind == 1 {
-                            let buffer =
-                                draft.custom_buffers.entry(key).or_insert_with(|| {
-                                    let buffer = plico::TextBuffer::secret();
-                                    buffer.set(Zeroizing::new(value.clone()));
-                                    buffer
-                                });
-                            text_input(ui, "Field value", buffer).width(180.).grow(1.);
-                            *value = buffer.with_value(str::to_owned);
-                        } else {
-                            text_input_string(ui, "Field value", value).width(180.).grow(1.);
-                        }
-                        let mut selected = kind.to_string();
-                        picker(ui, "Field type", &mut selected,
-                            self.popups.entry(format!("field-{key}")).or_default(),
-                            &entries(&[("0", "Text"), ("1", "Hidden"), ("2", "Boolean")]));
-                        if let Some(kind) = selected.parse::<u8>().ok()
-                            .and_then(|n| plicowarden_sdk::FieldType::try_from(n).ok())
-                        {
-                            if field.r#type != kind {
-                                draft.custom_buffers.remove(&key);
-                            }
-                            field.r#type = kind;
-                        }
-                        if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                            .icon(crate::icons::get("close")).text("Remove field").ghost().background_alpha(0.)
-                            .clicked()
-                        {
-                            remove = Some(index);
-                        }
-                    };
-                });
-            }
-            if let Some(index) = remove {
-                draft.custom.remove(index);
-                let key = draft.custom_keys.remove(index);
-                if let Some(buffer) = draft.custom_buffers.remove(&key) {
-                    buffer.clear();
                 }
-            }
-            row(ui).width_percent(100.).justify(Justify::End).gap(10) + |ui| {
-                let empty = draft.fields.get("name").is_none_or(|b| b.with_value(|s| s.trim().is_empty()));
-                if self.busy {
-                    text(ui, "Saving…").color(MUTED);
+                ui.keyed("name", |ui| edit_field(ui, &mut draft, "name", "Item name"));
+                row(ui).gap(12).width_percent(100.).align(Align::Center) + |ui| {
+                    checkbox(ui, "Favorite", &mut draft.favorite);
+                    let mut folders = vec![(String::new(), "No folder".into())];
+                    folders.extend(self.folders.iter().map(|f| (f.id.clone(), f.name.clone())));
+                    picker(ui, "Folder", &mut draft.folder, self.popups.entry("folder".into()).or_default(),
+                        &folders);
+                };
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                text(ui, "Fields").font_size(13).weight(650);
+                for &(key, label) in kind_fields(&draft.kind) {
+                    ui.keyed(key, |ui| edit_field(ui, &mut draft, key, label));
                 }
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("save")).text("Save item").primary()
-                    .disabled(self.busy || empty || !self.authenticated).clicked()
+                if draft.kind == "login"
+                    && button(ui).icon(crate::icons::get("sync")).text("Generate a strong password").ghost()
+                        .disabled(self.busy).clicked()
                 {
-                    save = true;
+                    match crate::generator::generate(24, true) {
+                        Ok(value) => draft.buffer("password", true, false).set(value),
+                        Err(error) => self.error = error.to_string(),
+                    }
                 }
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                text(ui, "Notes").font_size(13).weight(650);
+                ui.keyed("notes", |ui| edit_field(ui, &mut draft, "notes", "Notes"));
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center) + |ui| {
+                    text(ui, "Custom fields").font_size(13).weight(650);
+                    if button(ui).icon(crate::icons::get("plus")).text("Add custom field").ghost().clicked() {
+                        draft.custom.push(plicowarden_sdk::FieldView {
+                            name: Some(String::new()),
+                            value: Some(String::new()),
+                            r#type: plicowarden_sdk::FieldType::Text,
+                            linked_id: None,
+                        });
+                        draft.custom_keys.push(draft.next_custom_key);
+                        draft.next_custom_key += 1;
+                    }
+                };
+                let mut remove = None;
+                for (index, field) in draft.custom.iter_mut().enumerate() {
+                    let key = draft.custom_keys[index];
+                    ui.keyed(key, |ui| {
+                        // Linked fields must survive untouched; they are not free-form text.
+                        let kind = serde_json::to_value(field.r#type).ok().and_then(|v| v.as_u64()).unwrap_or(0);
+                        if kind == 3 {
+                            text(ui, field.name.as_deref().unwrap_or("Linked field")).color(MUTED);
+                            return;
+                        }
+                        row(ui).width_percent(100.).gap(8).wrap(true).align(Align::Center) + |ui| {
+                            let name = field.name.get_or_insert_with(String::new);
+                            text_input_string(ui, "Field name", name).width(160.).grow(1.);
+                            let value = field.value.get_or_insert_with(String::new);
+                            if kind == 1 {
+                                let buffer =
+                                    draft.custom_buffers.entry(key).or_insert_with(|| {
+                                        let buffer = plico::TextBuffer::secret();
+                                        buffer.set(Zeroizing::new(value.clone()));
+                                        buffer
+                                    });
+                                text_input(ui, "Field value", buffer).width(180.).grow(1.);
+                                *value = buffer.with_value(str::to_owned);
+                            } else {
+                                text_input_string(ui, "Field value", value).width(180.).grow(1.);
+                            }
+                            let mut selected = kind.to_string();
+                            picker(ui, "Field type", &mut selected,
+                                self.popups.entry(format!("field-{key}")).or_default(),
+                                &entries(&[("0", "Text"), ("1", "Hidden"), ("2", "Boolean")]));
+                            if let Some(kind) = selected.parse::<u8>().ok()
+                                .and_then(|n| plicowarden_sdk::FieldType::try_from(n).ok())
+                            {
+                                if field.r#type != kind {
+                                    draft.custom_buffers.remove(&key);
+                                }
+                                field.r#type = kind;
+                            }
+                            if button(ui).icon(crate::icons::get("close")).text("Remove field").ghost().clicked() {
+                                remove = Some(index);
+                            }
+                        };
+                    });
+                }
+                if let Some(index) = remove {
+                    draft.custom.remove(index);
+                    let key = draft.custom_keys.remove(index);
+                    if let Some(buffer) = draft.custom_buffers.remove(&key) {
+                        buffer.clear();
+                    }
+                }
+            };
+            };
+            };
+            surface(ui).width_percent(100.).padding(12.).gap(10.) + |ui| {
+                let empty = draft.fields.get("name").is_none_or(|b| b.with_value(|s| s.trim().is_empty()));
+                row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center).gap(10.) + |ui| {
+                    text(ui, if self.busy { "Saving…" } else { "" })
+                        .font_size(12).color(MUTED);
+                    if button(ui).icon(crate::icons::get("save")).text("Save item").primary()
+                        .disabled(self.busy || empty || !self.authenticated).clicked()
+                    {
+                        save = true;
+                    }
+                };
             };
         };
         if !cancel {
@@ -586,8 +688,7 @@ impl Warden {
                     ui.close_modal();
                 }
                 if button(ui).text("Move").aria_label("Move selected items").icon(crate::icons::get("folder"))
-                    .primary().radius(6.).elevation(Elevation::CONTROL)
-                    .disabled(self.busy || self.move_ids.is_empty()).clicked()
+                    .primary().radius(6.).disabled(self.busy || self.move_ids.is_empty()).clicked()
                 {
                     confirmed = true;
                 }
@@ -605,7 +706,8 @@ impl Warden {
         modal(ui, &mut state).header(false).title("Folders").width(560.).children(|ui| {
             text(ui, "Folders").font_size(24).weight(700);
             text(ui, "Organize your personal vault. Folder names are encrypted.").width_percent(100.).color(MUTED);
-            column(ui).width_percent(100.).max_height(360.).scroll_y(true).gap(10) + |ui| {
+            let list_height = (self.folders.len() as f32 * 42.).clamp(42., 360.);
+            column(ui).width_percent(100.).height(list_height).scroll_y(true).gap(10) + |ui| {
                 for folder in self.folders.clone() {
                     ui.keyed(crate::model::business_key(&folder.id), |ui| {
                         row(ui).width_percent(100.).gap(8).align(Align::Center) + |ui| {
@@ -614,9 +716,7 @@ impl Warden {
                             text_input_string(ui, "Folder name", value).width(0.).grow(1.)
                                 .disabled(self.busy);
                             let name = value.clone();
-                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("edit")).text("Rename").ghost().background_alpha(0.)
-                                .disabled(
+                            if button(ui).icon(crate::icons::get("edit")).text("Rename").ghost().disabled(
                                 self.busy
                                     || name.trim().is_empty()
                                     || name.trim() == folder.name,
@@ -628,9 +728,8 @@ impl Warden {
                                     delete: false,
                                 });
                             }
-                            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                                .icon(crate::icons::get("trash")).text("Delete folder").ghost()
-                                .background_alpha(0.).disabled(self.busy).clicked()
+                            if button(ui).icon(crate::icons::get("trash")).text("Delete folder").ghost()
+                                .disabled(self.busy).clicked()
                             {
                                 self.ask(&folder.id, "deleteFolder");
                                 ui.close_modal();
@@ -642,8 +741,7 @@ impl Warden {
             row(ui).width_percent(100.).gap(8) + |ui| {
                 text_input_string(ui, "New folder name", &mut self.folder_name).placeholder("New folder")
                     .width(0.).grow(1.).disabled(self.busy);
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("plus")).text("Create folder").primary()
+                if button(ui).icon(crate::icons::get("plus")).text("Create folder").primary()
                     .disabled(self.busy || self.folder_name.trim().is_empty()).clicked()
                 {
                     let name = std::mem::take(&mut self.folder_name);
@@ -657,10 +755,7 @@ impl Warden {
             if copyable_error(ui, &self.error) {
                 self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
             }
-            if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                .icon(crate::icons::get("check")).text("Done").ghost().background_alpha(0.).disabled(self.busy)
-                .clicked()
-            {
+            if button(ui).icon(crate::icons::get("check")).text("Done").ghost().disabled(self.busy).clicked() {
                 ui.close_modal();
             }
         });
@@ -695,14 +790,10 @@ impl Warden {
             text(ui, title).font_size(24).weight(700);
             text(ui, message).width_percent(100.).color(MUTED);
             row(ui).width_percent(100.).justify(Justify::End).gap(10) + |ui| {
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("close")).text("Cancel").ghost().background_alpha(0.).clicked()
-                {
+                if button(ui).icon(crate::icons::get("close")).text("Cancel").ghost().clicked() {
                     ui.close_modal();
                 }
-                if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                    .icon(crate::icons::get("trash")).text(label).primary().clicked()
-                {
+                if button(ui).icon(crate::icons::get("trash")).text(label).primary().clicked() {
                     ui.close_modal();
                     if action == "deleteFolder" {
                         self.request(Request::Folder {
@@ -742,11 +833,9 @@ impl Warden {
                 text(ui, "The destination and purpose are not verified. Only allow a request you just initiated. This request expires after 30 seconds.")
                     .color(MUTED).width_percent(100.);
                 row(ui).gap(12).justify(Justify::End).width_percent(100.) + |ui| {
-                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                        .icon(crate::icons::get("close")).text("Deny SSH signature").clicked() { decision = Some(false); }
-                    if button(ui).radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
-                        .icon(crate::icons::get("check")).text("Allow SSH signature once").primary().disabled(self.busy)
-                        .clicked() { decision = Some(true); }
+                    if button(ui).icon(crate::icons::get("close")).text("Deny SSH signature").clicked() { decision = Some(false); }
+                    if button(ui).icon(crate::icons::get("check")).text("Allow SSH signature once").primary()
+                        .disabled(self.busy).clicked() { decision = Some(true); }
                 };
             };
         });
@@ -765,36 +854,80 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     pub fn login_progress_ui(&mut self, ui: &mut UiContext) {
-        use crate::login_progress::StepState;
-        if !self.login_progress.visible || self.login_progress.steps.is_empty() { return; }
-        let steps = self.login_progress.steps.clone();
+        if !self.login_progress.visible || self.login_progress.steps.is_empty() {
+            return;
+        }
+        let mut hide = false;
         column(ui).width_percent(100.).gap(10).padding(12).radius(8.).background(Color::Control) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
                 text(ui, "Connection progress").font_size(13).weight(600).width(0.).grow(1.);
-                if !self.login_open && button(ui).text("Hide progress").ghost().height(28.).clicked() {
-                    self.login_progress.visible = false;
+                if !self.login_open
+                    && button(ui).text("Hide progress").ghost().height(28.).clicked()
+                {
+                    hide = true;
                 }
             };
-            for (index, step) in steps.into_iter().enumerate() {
-                ui.keyed(index as u64, |ui| {
+            self.progress_steps(ui);
+        };
+        if hide {
+            self.login_progress.visible = false;
+        }
+    }
+    /// The stage rows shared by the login block and the floating sync card.
+    pub fn progress_steps(&self, ui: &mut UiContext) {
+        use crate::login_progress::StepState;
+        for (index, step) in self.login_progress.steps.iter().cloned().enumerate() {
+            ui.keyed(index as u64, |ui| {
                 let color = match step.state {
-                    StepState::Complete => Color::Literal(0x2e8650),
+                    StepState::Complete => Color::Success,
                     StepState::Failed => Color::Danger,
                     _ => MUTED,
                 };
-                row(ui).width_percent(100.).gap(10).align(Align::Center) + |ui| {
-                    if step.state == StepState::Loading { spinner(ui); }
-                    else { glyph(ui, if step.state == StepState::Complete { "check" } else if step.state == StepState::Failed { "close" } else { "clock" }, 16., color); }
-                    text(ui, if step.state == StepState::Loading {step.stage.label()} else {step.stage.title()})
-                        .font_size(13).color(color).width(0.).grow(1.);
-                    text(ui, match step.state {
-                        StepState::Pending => "Pending", StepState::Loading => "In progress",
-                        StepState::Complete => "Done", StepState::Failed => "Failed",
-                        StepState::Waiting => "Verification required", StepState::Paused => "Paused",
-                    }).font_size(12).color(color);
-                };
-                });
-            }
-        };
+                let _ = row(ui).width_percent(100.).gap(10).align(Align::Center)
+                    + |ui| {
+                        if step.state == StepState::Loading {
+                            spinner(ui);
+                        } else {
+                            glyph(
+                                ui,
+                                if step.state == StepState::Complete {
+                                    "check"
+                                } else if step.state == StepState::Failed {
+                                    "close"
+                                } else {
+                                    "clock"
+                                },
+                                16.,
+                                color,
+                            );
+                        }
+                        text(
+                            ui,
+                            if step.state == StepState::Loading {
+                                step.stage.label()
+                            } else {
+                                step.stage.title()
+                            },
+                        )
+                        .font_size(13)
+                        .color(color)
+                        .width(0.)
+                        .grow(1.);
+                        text(
+                            ui,
+                            match step.state {
+                                StepState::Pending => "Pending",
+                                StepState::Loading => "In progress",
+                                StepState::Complete => "Done",
+                                StepState::Failed => "Failed",
+                                StepState::Waiting => "Verification required",
+                                StepState::Paused => "Paused",
+                            },
+                        )
+                        .font_size(12)
+                        .color(color);
+                    };
+            });
+        }
     }
 }

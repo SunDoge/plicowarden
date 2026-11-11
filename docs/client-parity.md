@@ -10,7 +10,8 @@ authorized live sandbox check is recorded in `experiments/live-vault-validation.
 
 | Capability | Current behavior | Verification limit |
 | --- | --- | --- |
-| Vault navigation | Navigation, list and details default to three columns down to 820 logical px; explicit sidebar toggle retained | UI and viewport tests |
+| Vault navigation | Navigation, list and details default to three columns down to 900 logical px; below that the sidebar becomes a pane and below 640 px the list and detail switch one at a time | UI and viewport tests |
+| Command palette | Header trigger (search icon on narrow windows) opens six global commands and up to eight matching vault items; choosing an item selects it and closes the palette | Recipe and focus tests |
 | Search and filters | Active-account in-memory SQLite FTS5 for names/usernames/URIs/notes/text fields, plus type/favorites/folder/archive/trash/TOTP filters | Multi-term/CJK/literal matching and stale response tests; live cached-note search checked; advanced Lunr syntax pending |
 | Login | Saved-account local master-password unlock, account switching/add/remove, Email → password, US/EU/self-hosted endpoints, supported 2FA, cancel, retry, animated busy indicator and worker-driven authentication/sync/unlock stages | Synthetic replies/configuration; authorized Edgewarden account login via SDK and UI host, authenticator challenge/invalid-code/valid-code paths checked |
 | Item operations | Personal login/card/identity/note/SSH create/edit, revision patches, favorites, clone, archive, trash, restore/purge | SDK guards/synthetic forms; authorized live personal login/card/identity/SSH CRUD checked; note delete required cleanup after transport failure (see live validation); organization items remain read-only |
@@ -21,11 +22,11 @@ authorized live sandbox check is recorded in `experiments/live-vault-validation.
 | Export | Personal non-trashed items/folders, official JSON or password-protected JSON; item count checked before writing; no overwrite; Unix file mode 0600 | File privacy/guard tests; no real-account export/restore roundtrip |
 | Import | Official SDK KDBX parser/encryption/upload, optional key file path, personal destination, 10 MiB bound, refresh after upload | Locked/size guards and form tests; no real-account import |
 | Generator | Password, passphrase, username, copy and in-memory history | OS randomness and native-input tests |
-| SSH agent | Unix signing approval, timeout/lock revocation | Local synthetic agent tests; no real vault integration |
+| SSH agent | Unix signing approval, per-signature timeout/lock revocation, and an in-memory access history (last 200 outcomes with key name, fingerprint and peer PID) under Settings › SSH agent › History | Local synthetic agent tests; no real vault integration |
 | Tray / notifications | Native menu (open/lock/quit), close-to-tray with fallback, saved close/notification preferences, generic SSH notification activation | Isolated Linux X11/D-Bus smoke and host lock tests; native macOS/Windows and packaged notification identity pending |
 | Window chrome | App-drawn controls and OS drag/minimize/close/maximize commands; content zoom independent | Command/geometry tests; macOS runtime pending |
 | Security settings | Device-local auto-lock (1–60 minutes), clipboard expiry (10–120 seconds), minimize after successful copy; meaningful input refreshes a live session | Synthetic expiry, persistence/error and copy command tests; no real clipboard expiry or macOS runtime test |
-| Appearance | Solid MyGo-style controls, subtle borders/shadows and persistent interface zoom | Render recipes; native macOS appearance pending |
+| Appearance | Triwarden-inspired floating shell: 8px window inset, 260px navigation / 320px list columns (220/260 compact), solid white panels over a pastel wash, compact controls, a settings sheet with its own section sidebar, floating sync/lock footer, branded split login (centered card on narrow windows) and persistent interface zoom | Render recipes; native macOS appearance pending |
 
 Bulk writes are not transactions: ownership/reprompt guards run before any write,
 then independent server operations can succeed or fail. The result retains failed
@@ -61,6 +62,11 @@ this app does not claim byte-for-byte parity or full transient-memory erasure.
 - `apps/desktop/src/vault/app/vault-v3/vault.component.html`
 - `apps/desktop/src/vault/app/vault-v3/vault-list.component.html`
 - `apps/desktop/src/vault/app/vault-v3/vault-filter/vault-filter.component.html`
+- `apps/desktop/src/app/layout/desktop-layout.component.html`
+- `libs/components/src/navigation/side-nav-width.service.ts`
+- `libs/components/src/navigation/side-nav.component.html`
+- `libs/vault/src/cipher-view/cipher-view.component.html`
+- `libs/vault/src/cipher-view/login-credentials/login-credentials-view.component.html`
 - `apps/desktop/src/app/accounts/settings-dialog.component.html`
 - `apps/desktop/src/app/tools/import/import-desktop.component.html`
 - `apps/desktop/src/app/tools/export/export-desktop.component.html`

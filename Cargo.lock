@@ -251,13 +251,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aeb9553e62312c8756a5979254fc6d7da8bbeb5986a1e17037fab932f7037917"
 dependencies = [
  "clipboard-win",
+ "image",
  "log",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -2220,7 +2223,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -2254,6 +2257,12 @@ checksum = "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
 dependencies = [
  "libloading",
 ]
+
+[[package]]
+name = "doctest-file"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2db04e74f0a9a93103b50e90b96024c9b2bdca8bce6a632ec71b88736d3d359"
 
 [[package]]
 name = "document-features"
@@ -2477,7 +2486,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2543,6 +2552,12 @@ name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+
+[[package]]
+name = "fax"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
 
 [[package]]
 name = "fdeflate"
@@ -2922,7 +2937,7 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3489,6 +3504,7 @@ dependencies = [
  "moxcms",
  "num-traits",
  "png",
+ "tiff",
  "zune-core",
  "zune-jpeg",
 ]
@@ -3547,6 +3563,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "inotify"
+version = "0.11.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cc00ea907cab49550b7da656f80ebb97be1b997d931fbcd28d39734e17ce592"
+dependencies = [
+ "bitflags 2.13.2",
+ "inotify-sys",
+ "libc",
+]
+
+[[package]]
+name = "inotify-sys"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c033f80b2c113cdf91ab7a33faa9cbc014726dcad99880c8609af2a370edf37d"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3563,6 +3599,19 @@ checksum = "3b5cf4372d022092674a83b8febf5865f7a573cc0c5baec5e49c879b6a20978f"
 dependencies = [
  "block-padding",
  "hybrid-array",
+]
+
+[[package]]
+name = "interprocess"
+version = "2.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f0ed453af5ae3bdbf68e41dde07eae0bffcc986419f63521ba9c89d82988c70"
+dependencies = [
+ "doctest-file",
+ "libc",
+ "recvmsg",
+ "widestring",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3841,6 +3890,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
+name = "kqueue"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d763e5b24120b4ddf50de6c92308156765aabfbbccebf401da7cff2d70a41ea"
+dependencies = [
+ "kqueue-sys",
+ "libc",
+]
+
+[[package]]
+name = "kqueue-sys"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07293a4e297ac234359b510362495713f75ea345d5307140414f20c69ffeb087"
+dependencies = [
+ "bitflags 2.13.2",
+ "libc",
+]
+
+[[package]]
 name = "ksni"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4093,6 +4162,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
 dependencies = [
  "libc",
+ "log",
  "wasi",
  "windows-sys 0.61.2",
 ]
@@ -4268,6 +4338,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "notify"
+version = "8.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c41a04a5f59df9322cc657286dd2d79f90816119b22c5f847607c850110205ab"
+dependencies = [
+ "bitflags 2.13.2",
+ "inotify",
+ "kqueue",
+ "libc",
+ "log",
+ "mio",
+ "notify-types",
+ "objc2-core-foundation",
+ "objc2-core-services",
+ "walkdir",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "notify-rust"
 version = "4.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4282,12 +4371,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "notify-types"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c491a384baf9fec20df565cdb8138a12809d4c7439763b566eb8114c5d59979"
+dependencies = [
+ "bitflags 2.13.2",
+]
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4481,6 +4579,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "objc2-core-services"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583300ad934cba24ff5292aee751ecc070f7ca6b39a574cc21b7b5e588e06a0b"
+dependencies = [
+ "libc",
+ "objc2-core-foundation",
+]
+
+[[package]]
 name = "objc2-core-text"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4671,7 +4779,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -5220,8 +5328,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "plico"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5237,8 +5344,7 @@ dependencies = [
 
 [[package]]
 name = "plico-desktop"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "image",
  "peniko",
@@ -5247,7 +5353,7 @@ dependencies = [
  "plico-renderer",
  "plico-runtime",
  "plico-shell",
- "plico-wgpu",
+ "plico-wgpu 0.3.2",
  "pollster 1.0.1",
  "serde",
  "serde_json",
@@ -5256,8 +5362,7 @@ dependencies = [
 
 [[package]]
 name = "plico-dev"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5269,8 +5374,7 @@ dependencies = [
 
 [[package]]
 name = "plico-macros"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5280,8 +5384,7 @@ dependencies = [
 
 [[package]]
 name = "plico-motion"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "plico",
  "serde",
@@ -5312,9 +5415,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "plico-native"
+version = "0.3.2"
+dependencies = [
+ "cairo-rs",
+ "lru",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-text",
+ "pango",
+ "pangocairo",
+ "snafu",
+ "tempfile",
+ "unicode-bidi",
+ "windows",
+ "windows-core",
+ "yeslogic-fontconfig-sys",
+]
+
+[[package]]
 name = "plico-renderer"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5343,8 +5466,7 @@ dependencies = [
 
 [[package]]
 name = "plico-runtime"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "elsa",
  "kurbo",
@@ -5366,8 +5488,7 @@ dependencies = [
 
 [[package]]
 name = "plico-shell"
-version = "0.3.1"
-source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
+version = "0.3.2"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5376,7 +5497,9 @@ dependencies = [
  "futures-lite",
  "futures-util",
  "image",
+ "interprocess",
  "kurbo",
+ "notify",
  "notify-rust",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -5386,7 +5509,7 @@ dependencies = [
  "parley",
  "peniko",
  "plico-renderer",
- "plico-wgpu",
+ "plico-wgpu 0.3.2",
  "pollster 1.0.1",
  "raw-window-handle",
  "rfd",
@@ -5406,6 +5529,25 @@ name = "plico-wgpu"
 version = "0.3.1"
 source = "git+https://github.com/SunDoge/plico.git?rev=8d4068ec9eca02e3ea9ef2930c3ca84035c87b99#8d4068ec9eca02e3ea9ef2930c3ca84035c87b99"
 dependencies = [
+ "bytemuck",
+ "kurbo",
+ "libc",
+ "lru",
+ "naga",
+ "peniko",
+ "plico-native 0.3.1",
+ "plico-renderer",
+ "pollster 1.0.1",
+ "resvg",
+ "snafu",
+ "tracing",
+ "wgpu",
+]
+
+[[package]]
+name = "plico-wgpu"
+version = "0.3.2"
+dependencies = [
  "block2 0.6.2",
  "bytemuck",
  "kurbo",
@@ -5417,7 +5559,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-quartz-core 0.3.2",
  "peniko",
- "plico-native",
+ "plico-native 0.3.2",
  "plico-renderer",
  "pollster 1.0.1",
  "raw-window-handle",
@@ -5439,7 +5581,7 @@ dependencies = [
  "plico-dev",
  "plico-renderer",
  "plico-runtime",
- "plico-wgpu",
+ "plico-wgpu 0.3.1",
  "plicowarden-sdk",
  "pollster 1.0.1",
  "rfd",
@@ -5867,6 +6009,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "recvmsg"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3edd4d5d42c92f0a659926464d4cce56b562761267ecf0f469d85b7de384175"
+
+[[package]]
 name = "redox_event"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6240,7 +6388,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6297,7 +6445,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6318,7 +6466,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7278,10 +7426,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7346,6 +7494,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ad99c4c6d32803332c548b1af0540b357b3f5fc0be8f6c6bfe8b2e6ae784070"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "tiff"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b63feaf3343d35b6ca4d50483f94843803b0f51634937cc2ec519fc32232bc52"
+dependencies = [
+ "fax",
+ "flate2",
+ "half",
+ "quick-error",
+ "weezl",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -8336,12 +8498,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
+
+[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

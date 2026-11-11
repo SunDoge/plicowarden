@@ -17,8 +17,8 @@ use bitwarden_crypto_sync_handler::CryptoSyncHandler;
 use bitwarden_pm::PasswordManagerClient;
 use bitwarden_sync::{SyncClient, SyncHandler, SyncHandlerError, SyncRequest};
 use bitwarden_vault::{
-    Cipher, CipherListViewType, CipherRepromptType, CipherType, CipherView, FolderSyncHandler,
-    VaultClientExt, generate_totp,
+    Cipher, CipherListViewType, CipherRepromptType, CipherType, CipherView, FieldType,
+    FolderSyncHandler, VaultClientExt, generate_totp,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use zeroize::{Zeroize, Zeroizing};
 const DEFAULT_AUTO_LOCK_AFTER: Duration = Duration::from_secs(300);
+const CACHED_REAUTH_PASSWORD_TTL: Duration = Duration::from_secs(120);
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
@@ -44,7 +45,7 @@ pub struct TwoFactorSubmitRequest {
     pub token: Zeroizing<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TwoFactorOption {
     pub id: TwoFactorProviderId,
@@ -123,7 +124,7 @@ pub struct VaultFolder {
     pub name: String,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultSnapshot {
     pub email: String,
@@ -135,6 +136,16 @@ pub struct VaultSnapshot {
     pub cache_warning: Option<String>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetailField {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    pub hidden: bool,
+    pub boolean: bool,
+}
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDetails {
@@ -171,6 +182,12 @@ pub struct ItemDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub folder_id: Option<String>,
     pub deleted: bool,
+    pub fields: Vec<DetailField>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssh_public_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssh_fingerprint: Option<String>,
+    pub has_private_key: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity_title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -225,6 +242,9 @@ pub struct TotpCode {
     pub code: String,
     pub period: u32,
     pub expires_at: i64,
+    /// Whole seconds remaining when the worker generated this code. The UI
+    /// anchors it to its injected monotonic frame clock on receipt.
+    pub valid_for: u32,
 }
 
 #[derive(Default)]
@@ -315,9 +335,19 @@ struct PendingLogin {
     icon_base_url: String,
 }
 
+/// One-use bridge between a fast local unlock and its first online refresh.
+/// It is never serialized and `Zeroizing` clears the allocation when the
+/// refresh succeeds, the retry consumes it, it expires, or the vault locks.
+struct CachedReauth {
+    config: LoginRequest,
+    password: Zeroizing<String>,
+    expires_at: Instant,
+}
+
 pub struct VaultService {
     session: Option<Session>,
     pending_login: Option<PendingLogin>,
+    cached_reauth: StdMutex<Option<CachedReauth>>,
     auto_lock_after: Duration,
     clipboard_seconds: u32,
     pub(crate) bypass_cache_once: bool,
@@ -335,6 +365,7 @@ impl Default for VaultService {
         Self {
             session: None,
             pending_login: None,
+            cached_reauth: StdMutex::new(None),
             auto_lock_after: DEFAULT_AUTO_LOCK_AFTER,
             clipboard_seconds: 30,
             bypass_cache_once: false,
@@ -388,16 +419,29 @@ impl VaultService {
     ) -> Result<LoginOutcome, String> {
         let bypass_cache = std::mem::take(&mut self.bypass_cache_once);
         self.lock();
-        let (settings, icon_base_url) = login_configuration(&request)?;
         if !bypass_cache && let Some(root) = &self.cache_root {
             progress(LoginStage::UnlockingCache);
             if let Some((payload, unlock)) = crate::cache::load(root, &request, &password)? {
-                return self
-                    .restore_cached(payload, unlock, password)
-                    .await
-                    .map(|snapshot| LoginOutcome::Authenticated { snapshot });
+                let reauth = CachedReauth {
+                    config: request.clone(),
+                    password: password.clone(),
+                    expires_at: Instant::now() + CACHED_REAUTH_PASSWORD_TTL,
+                };
+                let snapshot = self.restore_cached(payload, unlock, password).await?;
+                *self.cached_reauth.lock().unwrap() = Some(reauth);
+                return Ok(LoginOutcome::Authenticated { snapshot });
             }
         }
+        self.authenticate_online(request, password, &progress).await
+    }
+
+    async fn authenticate_online(
+        &mut self,
+        request: LoginRequest,
+        password: Zeroizing<String>,
+        progress: &(dyn Fn(LoginStage) + Sync),
+    ) -> Result<LoginOutcome, String> {
+        let (settings, icon_base_url) = login_configuration(&request)?;
         self.cache_config = Some(request.clone());
         progress(LoginStage::Authenticating);
         let registry = bitwarden_state::registry::StateRegistry::new_with_memory_db();
@@ -437,9 +481,43 @@ impl VaultService {
         }
 
         let snapshot = self
-            .establish_session(email, client, icon_base_url, &progress)
+            .establish_session(email, client, icon_base_url, progress)
             .await?;
         Ok(LoginOutcome::Authenticated { snapshot })
+    }
+
+    /// Retry an expired cached token with the password that unlocked this
+    /// process less than two minutes ago. The credential is consumed before
+    /// network IO, so a second retry always requires explicit user input.
+    pub(crate) async fn reauthenticate_cached(
+        &mut self,
+        progress: impl Fn(LoginStage) + Send + Sync,
+    ) -> Result<Option<LoginOutcome>, String> {
+        let Some(reauth) = self.take_cached_reauth() else {
+            return Ok(None);
+        };
+        self.authenticate_online(reauth.config, reauth.password, &progress)
+            .await
+            .map(Some)
+    }
+
+    fn take_cached_reauth(&self) -> Option<CachedReauth> {
+        self.discard_expired_reauth();
+        self.cached_reauth.lock().unwrap().take()
+    }
+
+    pub(crate) fn discard_expired_reauth(&self) {
+        let mut reauth = self.cached_reauth.lock().unwrap();
+        if reauth
+            .as_ref()
+            .is_some_and(|reauth| Instant::now() >= reauth.expires_at)
+        {
+            *reauth = None;
+        }
+    }
+
+    pub(crate) fn clear_cached_reauth(&self) {
+        *self.cached_reauth.lock().unwrap() = None;
     }
 
     pub async fn submit_two_factor(
@@ -585,6 +663,8 @@ impl VaultService {
             last_activity: StdMutex::new(Instant::now()),
             icon_base_url,
         });
+        self.offline
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         self.pending_login = None;
         self.snapshot().await
     }
@@ -683,15 +763,11 @@ impl VaultService {
     ) -> Result<tokio::task::JoinHandle<Result<(), String>>, String> {
         let sync = self.session.as_ref().ok_or_else(locked)?.sync.clone();
         Ok(tokio::spawn(async move {
-            tokio::time::timeout(
-                Duration::from_secs(90),
-                sync.sync(SyncRequest {
-                    force: true,
-                    exclude_subdomains: Some(true),
-                }),
-            )
+            sync.sync(SyncRequest {
+                force: true,
+                exclude_subdomains: Some(true),
+            })
             .await
-            .map_err(|_| "Background synchronization timed out".to_owned())?
             .map(|_| ())
             .map_err(|error| {
                 format!(
@@ -725,6 +801,7 @@ impl VaultService {
             })?;
         self.offline
             .store(false, std::sync::atomic::Ordering::Relaxed);
+        self.clear_cached_reauth();
         self.snapshot().await
     }
 
@@ -982,6 +1059,7 @@ impl VaultService {
         *self.cache_warning.lock().unwrap() = None;
         self.session = None;
         self.pending_login = None;
+        self.clear_cached_reauth();
         if let Some(clipboard) = self.clipboard.get() {
             clipboard.clear();
         }
@@ -1090,6 +1168,7 @@ fn totp_code_from_view(view: &CipherView, now: chrono::DateTime<Utc>) -> Result<
         code: response.code,
         period: response_period,
         expires_at,
+        valid_for: u32::try_from((expires_at - now.timestamp()).max(0)).unwrap_or(response_period),
     })
 }
 
@@ -1158,6 +1237,35 @@ fn item_details_from_view(view: CipherView, include_secrets: bool) -> ItemDetail
             ),
         folder_id: view.folder_id.map(|id| id.to_string()),
         deleted: view.deleted_date.is_some(),
+        fields: view
+            .fields
+            .unwrap_or_default()
+            .into_iter()
+            .map(|field| {
+                let hidden = field.r#type == FieldType::Hidden;
+                DetailField {
+                    name: field.name.filter(|name| !name.is_empty()),
+                    value: field
+                        .value
+                        .filter(|value| !value.is_empty())
+                        .filter(|_| !hidden || include_secrets),
+                    hidden,
+                    boolean: field.r#type == FieldType::Boolean,
+                }
+            })
+            .collect(),
+        ssh_public_key: view
+            .ssh_key
+            .as_ref()
+            .and_then(|key| (!key.public_key.is_empty()).then(|| key.public_key.clone())),
+        ssh_fingerprint: view
+            .ssh_key
+            .as_ref()
+            .and_then(|key| (!key.fingerprint.is_empty()).then(|| key.fingerprint.clone())),
+        has_private_key: view
+            .ssh_key
+            .as_ref()
+            .is_some_and(|key| !key.private_key.is_empty()),
         identity_title: identity.and_then(|identity| identity.title.clone()),
         first_name: identity.and_then(|identity| identity.first_name.clone()),
         middle_name: identity.and_then(|identity| identity.middle_name.clone()),
@@ -1431,6 +1539,14 @@ fn locked() -> String {
     "Vault is locked.".into()
 }
 
+pub(crate) fn is_unauthorized(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("401")
+        || error.contains("unauthorized")
+        || error.contains("invalid_grant")
+        || error.contains("token has expired")
+}
+
 #[async_trait]
 impl crate::ssh_agent::VaultKeys for VaultService {
     async fn identities(&self) -> Result<Vec<crate::ssh_agent::KeyIdentity>, String> {
@@ -1583,6 +1699,39 @@ mod tests {
         assert!(service.lock_if_idle());
         assert!(service.pending_login.is_none());
         assert!(service.is_locked());
+    }
+
+    #[test]
+    fn cached_reauthentication_password_is_short_lived_and_lock_scoped() {
+        let credential = |expires_at| CachedReauth {
+            config: LoginRequest {
+                region: "self-hosted".into(),
+                server_url: Some("https://example.invalid".into()),
+                server_config: None,
+                email: "test@example.invalid".into(),
+            },
+            password: Zeroizing::new("synthetic-secret".into()),
+            expires_at,
+        };
+        let expired = VaultService {
+            cached_reauth: StdMutex::new(Some(credential(Instant::now() - Duration::from_secs(1)))),
+            ..Default::default()
+        };
+        expired.discard_expired_reauth();
+        assert!(expired.cached_reauth.lock().unwrap().is_none());
+
+        let mut locked = VaultService {
+            cached_reauth: StdMutex::new(Some(credential(
+                Instant::now() + CACHED_REAUTH_PASSWORD_TTL,
+            ))),
+            ..Default::default()
+        };
+        assert!(locked.take_cached_reauth().is_some());
+        assert!(locked.take_cached_reauth().is_none());
+        *locked.cached_reauth.lock().unwrap() =
+            Some(credential(Instant::now() + CACHED_REAUTH_PASSWORD_TTL));
+        locked.lock();
+        assert!(locked.cached_reauth.lock().unwrap().is_none());
     }
     fn idle_service(seconds: u64) -> VaultService {
         let client = PasswordManagerClient::new(None);

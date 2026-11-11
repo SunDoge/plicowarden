@@ -1,4 +1,4 @@
-import { advance, button, buttonsStartingWith, capture, click, expect, expectText, fill, flow, focus, matrix, recipe, suite, textbox } from "../tools/recipes/src/index.ts";
+import { advance, button, buttonsStartingWith, capture, click, expect, expectText, fill, flow, focus, key, matrix, recipe, suite, textbox } from "../tools/recipes/src/index.ts";
 import { demoVault, viewports } from "./fixtures/vault.ts";
 import { accountError } from "./fixtures/events.ts";
 import { search } from "./flows/search.ts";
@@ -21,10 +21,47 @@ export default suite([
       capture("blurred"),
     ],
   })),
+  recipe("sort-type", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Sort by type")), expect(button("Sort by name")).exists(),
+      capture("by-type")],
+  }),
+  recipe("filter-chip", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Favorites")), expect(button("Clear filter")).exists(),
+      capture("favorites"), click(button("Clear filter")),
+      expect(button("Clear filter")).absent(), expect(button("Select Airbnb")).exists()],
+  }),
+  recipe("notifications", {
+    state: demoVault({ screen: "notifications" }), viewport: viewports[0],
+    steps: [expect(button("Close notifications")).exists(), capture("panel"),
+      click(button("Close notifications")), expect(button("Close notifications")).absent()],
+  }),
+  recipe("empty-vault", {
+    state: demoVault({ screen: "empty" }), viewport: viewports[0],
+    steps: [expect(button("Add item")).exists(), capture("empty"),
+      click(button("Add item")), expect(button("Cancel editing")).exists()],
+  }),
+  recipe("custom-fields", {
+    state: demoVault({ screen: "fields" }), viewport: viewports[0],
+    steps: [expect(button("Copy Recovery email")).exists(),
+      expect(button("Copy API token")).absent(), capture("fields")],
+  }),
+  recipe("totp-copy", {
+    state: demoVault({ screen: "totp" }), viewport: viewports[0],
+    steps: [expect(button("Copy code")).enabled(true), click(button("Copy code")),
+      capture("copied")],
+  }),
   recipe("favorites", {
     state: demoVault(),
     steps: [click(button("Favorites")), expect(buttonsStartingWith("Select ")).count(4), capture("favorites-start"), advance(75), capture("favorites-transition"), advance(175), capture("favorites"),
       click(button("All Items")), expect(buttonsStartingWith("Select ")).count(12)],
+  }),
+  recipe("settings-account", {
+    state: demoVault({ screen: "settings" }), viewport: viewports[0],
+    steps: [click(button("Account")), expect(button("Manage accounts")).exists(),
+      expect(button("Copy email")).exists(), expect(button("Copy server URL")).exists(),
+      capture("account")],
   }),
   recipe("settings", {
     state: demoVault(),
@@ -34,6 +71,46 @@ export default suite([
       click(button("Reset appearance")), capture("defaults"),
       click(button("Close settings")), expect(button("Close settings")).absent(),
     ],
+  }),
+  recipe("command-palette", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Search or run a command")), capture("open"),
+      fill("Search vault or commands", "github"), expect(button("Open GitHub")).exists(), capture("search"),
+      click(button("Open GitHub")), expect(button("Open GitHub")).absent()],
+  }),
+  recipe("command-palette-keyboard", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Search or run a command")), fill("Search vault or commands", "github"),
+      key("Enter"), expect(textbox("Search vault or commands")).absent(),
+      expect(button("Open GitHub")).absent(), expect(button("Select GitHub")).exists()],
+  }),
+  recipe("palette-reveal", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Search or run a command")), fill("Search vault or commands", "studio"),
+      key("Enter"), advance(200), capture("revealed"), expect(button("Select Studio workstation")).exists()],
+  }),
+  recipe("command-palette-scroll", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Search or run a command")),
+      ...Array.from({ length: 7 }, () => key("ArrowDown")), capture("scrolled"),
+      key("Enter"), expect(button("Select Alarm system code")).exists()],
+  }),
+  recipe("command-palette-arrows", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Search or run a command")), key("ArrowDown"), key("Enter"),
+      expect(button("Generate password")).exists()],
+  }),
+  recipe("folder-tree", {
+    state: demoVault({ screen: "folders" }), viewport: viewports[0],
+    steps: [expect(button("Work/Backend")).exists(),
+      click(button("Work")), advance(250), expect(button("Work/Backend")).absent(), capture("collapsed"),
+      click(button("Work")), advance(250), expect(button("Work/Backend")).exists(),
+      click(button("Work/Backend")), expect(buttonsStartingWith("Select ")).count(1), capture("backend")],
+  }),
+  recipe("sidebar-fold", {
+    state: demoVault(), viewport: viewports[0],
+    steps: [click(button("Items")), advance(250), expect(button("All Items")).absent(), capture("closed"),
+      click(button("Items")), advance(300), expect(button("All Items")).exists(), capture("open")],
   }),
   recipe("login-rejected", {
     state: demoVault(),
@@ -66,6 +143,17 @@ export default suite([
     state: demoVault({ screen: "editor" }),
     steps: [expect(button("Cancel editing")).exists(), expect(button("Save item")).enabled(false), capture("new-item"), click(button("Cancel editing")), expect(button("Cancel editing")).absent()],
   }),
+  recipe("ssh-key-detail", {
+    state: demoVault({ screen: "ssh-key" }), viewport: viewports[0],
+    steps: [expect(button("Copy public key")).exists(), expect(button("Copy fingerprint")).exists(),
+      capture("detail")],
+  }),
+  recipe("card-detail", {
+    state: demoVault({ screen: "card" }), viewport: viewports[0],
+    steps: [expect(button("Show card number")).exists(), capture("masked"),
+      click(button("Show card number")), expect(button("Hide card number")).exists(),
+      capture("revealed")],
+  }),
   recipe("generator", {
     state: demoVault({ screen: "generator" }),
     steps: [expect(button("Generate password")).exists(), capture("initial"),
@@ -79,6 +167,15 @@ export default suite([
     steps: [expect(button("Allow SSH signature once")).exists(), advance(200), capture("approval"),
       click(button("Deny SSH signature")), expect(button("Allow SSH signature once")).enabled(false),
       advance(150), expect(button("Allow SSH signature once")).absent(), capture("denied")],
+  }),
+  recipe("ssh-access-history", {
+    state: demoVault({ screen: "ssh-history" }),
+    steps: [expect(button("History")).exists(),
+      click(button("Permissions")), expectText("Nothing has lasting access"), capture("permissions"),
+      click(button("History")), capture("history-all"),
+      expectText("Synthetic SSH key"), expectText("Release signing key"),
+      click(button("Not allowed")), capture("history-not-allowed"),
+      click(button("Clear history")), expectText("No SSH requests yet"), capture("history-empty")],
   }),
   recipe("macos-titlebar", {
     state: demoVault({ custom_titlebar: true }),

@@ -1,6 +1,6 @@
 #![cfg(unix)]
 use plicowarden_sdk::ssh_agent::{
-    self, Broker, Gate, KeyIdentity, RunningAgent, VaultKeys,
+    self, Broker, Gate, KeyIdentity, Outcome, RunningAgent, VaultKeys,
     ssh_key::{Algorithm, HashAlg, PrivateKey, Signature},
 };
 use signature::Verifier;
@@ -92,7 +92,10 @@ async fn protocol_list_and_sign_require_explicit_approval() {
         approval.fingerprint,
         vault.key.fingerprint(HashAlg::Sha256).to_string()
     );
-    broker.decide(approval.id, true, &vault).await;
+    let record = broker.decide(approval.id, true, &vault).await.unwrap();
+    assert_eq!(record.outcome, Outcome::Allowed);
+    assert_eq!(record.name, "Synthetic SSH key");
+    assert_eq!(record.fingerprint, approval.fingerprint);
     let signature = signing.await.unwrap().unwrap();
     vault
         .key
@@ -123,7 +126,15 @@ async fn denial_and_lock_reject_signing_and_stale_approvals() {
             gate.set(1, true);
             assert!(!gate.access().unlocked);
         }
-        broker.decide(approval.id, lock, &vault).await;
+        let record = broker.decide(approval.id, lock, &vault).await.unwrap();
+        assert_eq!(
+            record.outcome,
+            if lock {
+                Outcome::Locked
+            } else {
+                Outcome::Denied
+            }
+        );
         assert!(signing.await.unwrap().is_err());
     }
     assert_eq!(vault.signs.load(Ordering::SeqCst), 0);
@@ -238,8 +249,11 @@ async fn expired_approval_cannot_sign_even_if_allow_arrives_later() {
     };
     let approval = broker.receive(call, &vault).await.unwrap();
     tokio::time::advance(Duration::from_secs(31)).await;
-    assert_eq!(broker.expire(), [approval.id]);
-    broker.decide(approval.id, true, &vault).await;
+    let expired = broker.expire();
+    assert_eq!(expired.len(), 1);
+    assert_eq!(expired[0].id, approval.id);
+    assert_eq!(expired[0].outcome, Outcome::TimedOut);
+    assert!(broker.decide(approval.id, true, &vault).await.is_none());
     assert!(received.await.is_err());
     assert_eq!(vault.signs.load(Ordering::SeqCst), 0);
 }

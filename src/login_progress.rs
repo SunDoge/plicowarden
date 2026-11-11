@@ -39,6 +39,15 @@ impl LoginProgress {
         self.visible = true;
         self.steps[0].state = StepState::Loading;
     }
+    /// A manual or background refresh has one visible stage. The vault stays
+    /// usable and the footer's sync glyph carries the live indication.
+    pub fn begin_sync(&mut self) {
+        self.steps = vec![Step {
+            stage: LoginStage::Syncing,
+            state: StepState::Loading,
+        }];
+        self.visible = true;
+    }
     pub fn activate(&mut self, stage: LoginStage) {
         if self.steps.is_empty()
             || (stage == LoginStage::Authenticating

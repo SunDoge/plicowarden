@@ -101,13 +101,14 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
         display::window_options(false).corner_radius,
         if cfg!(target_os = "linux") { 0 } else { 16 }
     );
-    assert_eq!(
-        display::window_options(true).initial_inner_size,
-        (1224, 850)
-    );
+    assert_eq!(display::window_options(true).initial_inner_size, (950, 720));
     assert_eq!(
         display::window_options(false).initial_inner_size,
-        (1440, 1000)
+        (950, 720)
+    );
+    assert_eq!(
+        display::window_options(true).min_inner_size,
+        Some((600, 500))
     );
     let legacy: Appearance = serde_json::from_str(r#"{"liquidGlass":false,"frost":0.42}"#).unwrap();
     assert_eq!(legacy.ui_scale, Appearance::default().ui_scale);
@@ -208,18 +209,18 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
     assert_eq!(
         shaders(&source.engine.snapshot()),
         0,
-        "ordinary controls do not declare backdrop or ambience shaders"
+        "reduced transparency drops the pastel wash; the solid surfaces remain"
     );
     assert!(!source.has_anim());
 }
 
 #[test]
-fn solid_controls_never_declare_shaders_even_with_legacy_glass_preferences() {
-    fn assert_plain(nodes: &[plico::ViewNode]) {
-        for node in nodes {
-            assert_ne!(node.kind, plico::Kind::Shader);
-            assert_plain(&node.children);
-        }
+fn official_client_surfaces_ignore_removed_legacy_preferences_and_render() {
+    fn shaders(nodes: &[plico::ViewNode]) -> usize {
+        nodes
+            .iter()
+            .map(|node| usize::from(node.kind == plico::Kind::Shader) + shaders(&node.children))
+            .sum()
     }
     for screen in [
         "vault",
@@ -248,7 +249,10 @@ fn solid_controls_never_declare_shaders_even_with_legacy_glass_preferences() {
             "{screen}: {:?}",
             source.last_error
         );
-        assert_plain(&source.engine.snapshot());
+        assert!(
+            shaders(&source.engine.snapshot()) > 0,
+            "{screen}: the shell declares the pastel wash"
+        );
     }
 }
 

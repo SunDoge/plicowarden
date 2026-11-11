@@ -172,11 +172,11 @@ impl Warden {
                 };
                 if self.transfer.format == "encrypted" {
                     text(ui, "Export password").font_size(13).weight(600);
-                    text_input(ui, "Export password", &self.transfer.export_password).width_percent(100.)
-                        .disabled(disabled);
+                    field_input(text_input(ui, "Export password", &self.transfer.export_password))
+                        .width_percent(100.).disabled(disabled);
                     text(ui, "Confirm export password").font_size(13).weight(600);
-                    text_input(ui, "Confirm export password", &self.transfer.confirmation).width_percent(100.)
-                        .disabled(disabled);
+                    field_input(text_input(ui, "Confirm export password", &self.transfer.confirmation))
+                        .width_percent(100.).disabled(disabled);
                     text(ui, "Use at least 8 characters. You will need this password to restore the export.")
                         .font_size(12).color(MUTED).width_percent(100.);
                 } else {
@@ -195,11 +195,11 @@ impl Warden {
                 text(ui, "Choose a .kdbx file up to 10 MiB. Imported items are added to your personal vault; importing twice creates duplicates.")
                     .font_size(13).color(MUTED).width_percent(100.);
                 text(ui, "Database password").font_size(13).weight(600);
-                text_input(ui, "Database password", &self.transfer.import_password).width_percent(100.)
-                    .disabled(disabled);
+                field_input(text_input(ui, "Database password", &self.transfer.import_password))
+                    .width_percent(100.).disabled(disabled);
                 text(ui, "Key file path (optional)").font_size(13).weight(600);
-                text_input_string(ui, "Key file path", &mut self.transfer.key_file).width_percent(100.)
-                    .disabled(disabled);
+                field_input(text_input_string(ui, "Key file path", &mut self.transfer.key_file))
+                    .width_percent(100.).disabled(disabled);
                 checkbox(ui, "Import into my personal vault", &mut self.transfer.import_ack).disabled(disabled);
                 if button(ui).text("Choose database and import").icon(crate::icons::get("plus")).primary()
                     .radius(6.).elevation(Elevation::CONTROL).disabled(disabled || !self.transfer.import_ack)

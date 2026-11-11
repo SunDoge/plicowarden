@@ -24,6 +24,8 @@ use zeroize::Zeroizing;
 pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_PACKET: usize = 256 * 1024;
 const MAX_PENDING: usize = 16;
+/// Most recent signing requests retained for the access history.
+pub const HISTORY_CAPACITY: usize = 200;
 #[derive(Clone)]
 pub struct KeyIdentity {
     pub id: String,
@@ -45,6 +47,33 @@ pub struct Approval {
     pub name: String,
     pub fingerprint: String,
     pub process_id: Option<u32>,
+}
+/// How a signing request ended. The history keeps only this and the public
+/// request metadata; no signed data, key material or destination is retained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Allowed,
+    Denied,
+    TimedOut,
+    Locked,
+    Failed,
+}
+/// One completed signing request shown in the access history.
+#[derive(Clone, PartialEq, Eq)]
+pub struct AccessRecord {
+    pub id: u64,
+    pub name: String,
+    pub fingerprint: String,
+    pub process_id: Option<u32>,
+    pub outcome: Outcome,
+    /// Unix seconds when the request ended.
+    pub at: i64,
+}
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or(0)
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Access {
@@ -346,14 +375,30 @@ pub trait VaultKeys: Send + Sync {
 }
 struct Pending {
     call: Call,
+    id: u64,
     key: String,
+    name: String,
+    fingerprint: String,
     deadline: tokio::time::Instant,
+}
+impl Pending {
+    fn record(&self, outcome: Outcome) -> AccessRecord {
+        AccessRecord {
+            id: self.id,
+            name: self.name.clone(),
+            fingerprint: self.fingerprint.clone(),
+            process_id: self.call.process_id,
+            outcome,
+            at: unix_now(),
+        }
+    }
 }
 pub struct Broker {
     pub endpoint: Endpoint,
     pub incoming: mpsc::Receiver<Call>,
     gate: Gate,
     pending: std::collections::HashMap<u64, Pending>,
+    history: std::collections::VecDeque<AccessRecord>,
     next: u64,
 }
 impl Broker {
@@ -364,8 +409,19 @@ impl Broker {
             incoming,
             gate,
             pending: Default::default(),
+            history: Default::default(),
             next: 0,
         }
+    }
+
+    fn note(&mut self, record: AccessRecord) {
+        self.history.push_front(record);
+        self.history.truncate(HISTORY_CAPACITY);
+    }
+
+    /// Drop the local access history; pending requests are unaffected.
+    pub fn clear_history(&mut self) {
+        self.history.clear();
     }
     pub async fn receive(&mut self, call: Call, vault: &impl VaultKeys) -> Option<Approval> {
         let access = self.gate.access();
@@ -404,7 +460,7 @@ impl Broker {
                 self.next += 1;
                 let approval = Approval {
                     id: self.next,
-                    name: key.name,
+                    name: key.name.clone(),
                     fingerprint: key.public.fingerprint(HashAlg::Sha256).to_string(),
                     process_id: call.process_id,
                 };
@@ -412,7 +468,10 @@ impl Broker {
                     approval.id,
                     Pending {
                         call,
+                        id: approval.id,
                         key: key.id,
+                        name: approval.name.clone(),
+                        fingerprint: approval.fingerprint.clone(),
                         deadline: tokio::time::Instant::now() + APPROVAL_TIMEOUT,
                     },
                 );
@@ -420,15 +479,20 @@ impl Broker {
             }
         }
     }
-    pub async fn decide(&mut self, id: u64, allow: bool, vault: &impl VaultKeys) {
-        let Some(pending) = self.pending.remove(&id) else {
-            return;
-        };
+    /// Answer one request and return the public record of how it ended.
+    pub async fn decide(
+        &mut self,
+        id: u64,
+        allow: bool,
+        vault: &impl VaultKeys,
+    ) -> Option<AccessRecord> {
+        let pending = self.pending.remove(&id)?;
         let state = self.gate.access();
+        let expired = tokio::time::Instant::now() >= pending.deadline;
         let answer = if allow
             && state.unlocked
             && state.epoch == pending.call.epoch
-            && tokio::time::Instant::now() < pending.deadline
+            && !expired
             && !pending.call.reply.is_closed()
         {
             match &pending.call.operation {
@@ -442,32 +506,69 @@ impl Broker {
         } else {
             Err(())
         };
-        let answer = if self.gate.access() == state {
+        let final_state = self.gate.access();
+        let answer = if final_state == state {
             answer
         } else {
             Err(())
         };
+        let outcome = if answer.is_ok() {
+            Outcome::Allowed
+        } else if !allow {
+            Outcome::Denied
+        } else if !final_state.unlocked || final_state.epoch != pending.call.epoch {
+            Outcome::Locked
+        } else if expired {
+            Outcome::TimedOut
+        } else {
+            Outcome::Failed
+        };
+        let record = pending.record(outcome);
         let _ = pending.call.reply.send(answer);
+        self.note(record.clone());
+        Some(record)
     }
-    pub fn expire(&mut self) -> Vec<u64> {
+    /// Close requests whose approval window or unlock epoch elapsed.
+    pub fn expire(&mut self) -> Vec<AccessRecord> {
         let state = self.gate.access();
         let now = tokio::time::Instant::now();
         let mut closed = Vec::new();
-        self.pending.retain(|id, pending| {
+        self.pending.retain(|_, pending| {
             let keep = state.unlocked
                 && state.epoch == pending.call.epoch
                 && now < pending.deadline
                 && !pending.call.reply.is_closed();
             if !keep {
-                closed.push(*id);
+                let outcome = if !state.unlocked || state.epoch != pending.call.epoch {
+                    Outcome::Locked
+                } else if now >= pending.deadline {
+                    Outcome::TimedOut
+                } else {
+                    // The requesting process closed its connection.
+                    Outcome::Failed
+                };
+                closed.push(pending.record(outcome));
             }
             keep
         });
+        closed.sort_by_key(|record| record.id);
+        for record in &closed {
+            self.note(record.clone());
+        }
         closed
     }
-    pub fn clear(&mut self) -> Vec<u64> {
-        let ids = self.pending.keys().copied().collect();
+    /// Cancel every pending request, recording them as locked.
+    pub fn clear(&mut self) -> Vec<AccessRecord> {
+        let mut closed: Vec<_> = self
+            .pending
+            .values()
+            .map(|pending| pending.record(Outcome::Locked))
+            .collect();
         self.pending.clear();
-        ids
+        closed.sort_by_key(|record| record.id);
+        for record in &closed {
+            self.note(record.clone());
+        }
+        closed
     }
 }

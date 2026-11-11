@@ -6,11 +6,9 @@ pub const fn default_scale(macos: bool) -> f64 {
 }
 
 pub fn window_options(macos: bool) -> WindowOptions {
-    let (width, height, min_width, min_height) = if macos {
-        (1224, 850, 697, 544)
-    } else {
-        (1440, 1000, 820, 640)
-    };
+    // Match the official desktop client's first-launch footprint. Recipes use
+    // their own explicit viewport, so this only affects the real application.
+    let (width, height, min_width, min_height) = (950, 720, 600, 500);
     let native_frame = !macos && cfg!(target_os = "linux");
     WindowOptions::new()
         .title("Plicowarden")

@@ -42,6 +42,14 @@ identity, destination or signing purpose. Dismissal, denial and a 30-second
 timeout reject the request. Disabling, idle lock, disconnect or exit revokes all
 pending approvals. Enable again after signing in; enablement is not persisted.
 
+Settings · SSH agent splits into **Permissions** and **History**. Permissions shows
+the current agent state; every signature is approved once, so no app receives
+standing access. History keeps the last 200 completed requests in memory: key name,
+SHA-256 fingerprint, peer PID when available, how the request ended (allowed, denied,
+timed out, vault locked or failed) and how long ago. Key listings and signatures are
+not recorded. Locking the vault, signing out or switching accounts clears the history,
+as does **Clear history**; it is not persisted across app restarts.
+
 Only non-archived, non-trashed SSH items without master-password reprompt and
 with password-view permission are eligible. Only Ed25519, supported ECDSA and
 RSA SHA-2 signatures are accepted; RSA SHA-1 and RSA keys below 2048 bits are
@@ -140,8 +148,12 @@ The `plico new` template follows the same fast-iteration policy for new apps.
   does not depend on this service; UI-only edits do not recompile its implementation.
 - `src/appearance.rs`: appearance-only JSON, saved by a host worker under the OS
   local data directory for **Plicowarden**, independently of C# preferences.
-- The interface uses ordinary Plico widgets, opaque panels, subtle borders and
-  shadows. Colors and control proportions follow MyGo's standard light theme.
+- The interface follows Triwarden's floating-panel layout (see
+  [the layout notes](docs/triwarden-layout.md)) and uses ordinary Plico
+  widgets over a soft pastel window wash. Panels, cards, fields and the
+  floating footer are solid white with hairline borders and soft shadows;
+  reduced transparency drops the wash. Colors and control proportions follow
+  MyGo's standard light theme.
 
 ## Official client parity
 

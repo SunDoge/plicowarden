@@ -49,6 +49,7 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     pub fn security_ui(&mut self, ui: &mut UiContext) {
+        surface(ui).padding(18.).gap(12.) + |ui| {
         text(ui, "Applies to this device.").font_size(13).color(MUTED).width_percent(100.);
         let mut lock = self.security.auto_lock_minutes.to_string();
         let locks: Vec<_> = plicowarden_sdk::security::AUTO_LOCK_MINUTES.iter().map(|value| {
@@ -85,6 +86,7 @@ impl Warden {
             {
                 self.security = Default::default();
             }
+        };
         };
     }
 }

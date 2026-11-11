@@ -1,6 +1,9 @@
 use plicowarden::Warden;
 use plicowarden::model::{Editor, HostCommand};
-use plicowarden_sdk::{Event, Reply, service::EditData};
+use plicowarden_sdk::{
+    Event, Reply, Request,
+    service::{EditData, TotpCode, VaultSnapshot},
+};
 use std::collections::BTreeMap;
 use zeroize::Zeroizing;
 
@@ -28,6 +31,33 @@ fn edit_patches_preserve_untouched_and_missing_fields_and_revisions() {
     assert_eq!(patch.fields.len(), 1);
     assert!(patch.fields.contains_key("username"));
     assert_eq!(patch.expected_revision.as_deref(), Some("revision-1"));
+}
+
+#[test]
+fn expiring_totp_is_replaced_without_waiting_for_the_user() {
+    let mut app = Warden::default();
+    app.authenticated = true;
+    app.selected = app.items[0].id.clone();
+    app.items[0].has_totp = true;
+    app.code = Some(TotpCode {
+        code: "123456".into(),
+        period: 30,
+        expires_at: 300,
+        valid_for: 12,
+    });
+    app.code_received_at = Some(std::time::Duration::from_secs(4));
+
+    app.apply(Event {
+        ticket: 0,
+        result: Ok(Reply::TotpExpired(300)),
+    });
+
+    assert!(app.code.is_none() && app.code_received_at.is_none());
+    assert!(matches!(
+        app.commands.last(),
+        Some(HostCommand::Account { request, .. })
+            if matches!(request.as_ref(), Request::Totp(id) if id == &app.selected)
+    ));
 }
 #[test]
 fn lock_erases_editor_buffers_and_stale_replies_cannot_reveal_values() {
@@ -85,18 +115,36 @@ fn passphrases_and_usernames_use_the_full_dictionary_and_bounds() {
         .lines()
         .collect();
     assert_eq!(words.len(), 1296);
+    // "yo-yo" is part of the EFF list, so splitting on '-' cannot count the
+    // words. Parse the phrase instead: each word is followed by one separator.
+    fn composed(phrase: &str, count: usize, words: &std::collections::BTreeSet<&str>) -> bool {
+        if count == 0 {
+            return phrase.is_empty();
+        }
+        words.iter().any(|word| {
+            phrase.strip_prefix(word).is_some_and(|rest| {
+                if count == 1 {
+                    rest.is_empty()
+                } else {
+                    rest.strip_prefix('-')
+                        .is_some_and(|rest| composed(rest, count - 1, words))
+                }
+            })
+        })
+    }
     for count in [0, 6, 9, 12, usize::MAX] {
         let result = plicowarden::generator::passphrase(count).unwrap();
-        let parts: Vec<_> = result.split('-').collect();
-        assert_eq!(parts.len(), count.clamp(6, 12));
-        assert!(parts.iter().all(|word| words.contains(word)));
+        assert!(
+            composed(&result, count.clamp(6, 12), &words),
+            "{}",
+            &*result
+        );
     }
     let value = plicowarden::generator::username().unwrap();
-    let parts: Vec<_> = value.split('-').collect();
-    assert_eq!(parts.len(), 3);
-    assert!(words.contains(parts[0]) && words.contains(parts[1]));
-    assert_eq!(parts[2].len(), 4);
-    assert!(parts[2].bytes().all(|b| b.is_ascii_digit()));
+    let (words_part, digits) = value.rsplit_once('-').unwrap();
+    assert!(composed(words_part, 2, &words), "{}", &*value);
+    assert_eq!(digits.len(), 4);
+    assert!(digits.bytes().all(|b| b.is_ascii_digit()));
 }
 
 #[test]
@@ -297,11 +345,119 @@ fn stale_search_and_foreign_account_background_sync_cannot_replace_active_state(
     });
     assert!(app.authenticated);
     assert_eq!(app.pending, detail_ticket);
-    assert!(
-        app.error.contains("synthetic transport timeout"),
-        "background diagnostics must use the copyable error surface"
-    );
+    assert!(app.error.is_empty());
+    assert!(app.notifications.iter().any(|notification| {
+        notification.kind == plicowarden::model::NotificationKind::Error
+            && notification.detail.contains("synthetic transport timeout")
+    }));
 
     app.lock();
     assert!(app.search_matches.is_none() && app.search_ticket.is_none());
+}
+
+#[test]
+fn type_sort_groups_vault_kinds_in_sidebar_order() {
+    let mut app = Warden::default();
+    app.sort_by_type = true;
+    let rank = |kind: &str| match kind {
+        "login" => 0,
+        "card" => 1,
+        "identity" => 2,
+        "note" => 3,
+        "ssh-key" => 4,
+        _ => 5,
+    };
+    let kinds: Vec<_> = app.visible().iter().map(|item| item.kind.clone()).collect();
+    assert!(kinds.len() > 1);
+    assert!(
+        kinds
+            .windows(2)
+            .all(|pair| rank(&pair[0]) <= rank(&pair[1]))
+    );
+    assert!(kinds.iter().any(|kind| kind == "card"));
+    assert!(kinds.iter().any(|kind| kind == "ssh-key"));
+    app.sort_by_type = false;
+    assert!(
+        app.visible()
+            .windows(2)
+            .all(|pair| { pair[0].name.to_lowercase() <= pair[1].name.to_lowercase() })
+    );
+}
+
+#[test]
+fn online_snapshots_record_the_last_sync_time() {
+    let snapshot = |offline| VaultSnapshot {
+        email: "sync@example.invalid".into(),
+        items: Vec::new(),
+        folders: Vec::new(),
+        decrypt_failures: 0,
+        offline,
+        account_id: Some("account".into()),
+        cache_warning: None,
+    };
+    let mut app = Warden::default();
+    app.snapshot(snapshot(true));
+    assert!(app.last_sync_at.is_none());
+    app.snapshot(snapshot(false));
+    assert!(app.last_sync_at.is_some());
+    app.lock();
+    assert!(app.last_sync_at.is_none());
+}
+
+#[test]
+fn unauthorized_background_sync_returns_to_sign_in() {
+    let mut app = Warden::default();
+    app.authenticated = true;
+    app.account_email = "user@example.invalid".into();
+    app.email = "user@example.invalid".into();
+    app.apply(Event {
+        ticket: 0,
+        result: Ok(Reply::BackgroundSyncFailed(
+            "Background sync failed: error in response: status code 401 Unauthorized".into(),
+        )),
+    });
+    assert!(app.authenticated);
+    assert!(app.notice.contains("Session expired"));
+    assert!(app.error.is_empty());
+    assert_eq!(app.unread_notifications(), 1);
+    assert!(app.notifications.iter().any(|notification| {
+        notification.kind == plicowarden::model::NotificationKind::SessionExpired
+    }));
+    app.expire_session();
+    assert!(!app.authenticated);
+    assert!(app.login_open);
+    assert!(!app.login_password_step);
+    assert_eq!(app.email, "user@example.invalid");
+    assert!(app.notice.contains("Session expired"));
+}
+
+#[test]
+fn notifications_stay_unread_until_the_panel_opens() {
+    let mut app = Warden::default();
+    app.push_notification(
+        plicowarden::model::NotificationKind::Error,
+        "Error",
+        "Background sync failed",
+        None,
+    );
+    app.push_notification(
+        plicowarden::model::NotificationKind::LoginRequest,
+        "Device signing request",
+        "Studio workstation",
+        None,
+    );
+    assert_eq!(app.unread_notifications(), 2);
+    app.toggle_notifications();
+    assert!(app.notification_open);
+    assert_eq!(app.unread_notifications(), 1);
+    app.clear_read_notifications();
+    assert_eq!(app.notifications.len(), 1);
+    assert_eq!(
+        app.notifications
+            .front()
+            .map(|notification| notification.kind),
+        Some(plicowarden::model::NotificationKind::LoginRequest)
+    );
+    app.toggle_notifications();
+    assert!(!app.notification_open);
 }

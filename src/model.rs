@@ -173,6 +173,29 @@ pub enum HostCommand {
     SaveAppearance(Appearance),
     SaveSecurity(crate::security::SecuritySettings),
 }
+/// Settings › SSH agent view, matching the order of the segmented control.
+pub const SSH_PERMISSIONS: usize = 0;
+pub const SSH_HISTORY: usize = 1;
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum SshHistoryFilter {
+    All,
+    Allowed,
+    NotAllowed,
+}
+impl SshHistoryFilter {
+    pub fn includes(self, outcome: plicowarden_sdk::ssh_agent::Outcome) -> bool {
+        use plicowarden_sdk::ssh_agent::Outcome;
+        let refused = matches!(
+            outcome,
+            Outcome::Denied | Outcome::TimedOut | Outcome::Locked | Outcome::Failed
+        );
+        match self {
+            Self::All => true,
+            Self::Allowed => !refused,
+            Self::NotAllowed => refused,
+        }
+    }
+}
 pub struct Editor {
     pub id: Option<String>,
     pub kind: String,
@@ -292,6 +315,22 @@ pub fn multiline_field(key: &str) -> bool {
     matches!(key, "notes" | "uris" | "publicKey" | "privateKey")
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationKind {
+    Error,
+    SessionExpired,
+    LoginRequest,
+}
+#[derive(Clone)]
+pub struct AppNotification {
+    pub id: u64,
+    pub kind: NotificationKind,
+    pub title: String,
+    pub detail: String,
+    pub at: i64,
+    pub read: bool,
+    pub approval_id: Option<u64>,
+}
 pub struct Warden {
     pub items: Vec<Item>,
     pub query: String,
@@ -301,6 +340,7 @@ pub struct Warden {
     pub filter: String,
     pub selected: String,
     pub ascending: bool,
+    pub sort_by_type: bool,
     pub transfer: crate::transfer::TransferForm,
     pub transfer_dialog: bool,
     pub transfer_modal: ModalState,
@@ -313,6 +353,7 @@ pub struct Warden {
     pub titlebar_pressed: bool,
     pub reveal: bool,
     pub settings_open: bool,
+    pub settings_modal: plico::ModalState,
     pub settings_tab: String,
     pub security: crate::security::SecuritySettings,
     pub active_security: crate::security::SecuritySettings,
@@ -326,6 +367,7 @@ pub struct Warden {
     pub active_account_id: Option<String>,
     pub adding_account: bool,
     pub offline: bool,
+    pub last_sync_at: Option<i64>,
     pub deferred_snapshot: Option<Box<VaultSnapshot>>,
     pub saved_accounts: Vec<plicowarden_sdk::cache::SavedAccount>,
     pub accounts_modal: ModalState,
@@ -338,6 +380,8 @@ pub struct Warden {
     pub detail_cache: HashMap<String, ItemDetails>,
     pub shown_password: Option<Zeroizing<String>>,
     pub code: Option<TotpCode>,
+    pub code_received_at: Option<std::time::Duration>,
+    pub frame_time: plico::FrameTime,
     pub editor: Option<Editor>,
     pub move_modal: ModalState,
     pub move_ids: Vec<String>,
@@ -353,6 +397,12 @@ pub struct Warden {
     pub environment_open: bool,
     pub environment_error: String,
     pub login_focus: bool,
+    /// Set when the login identity should be written back to persisted state;
+    /// writing it on every keystroke rebuilt the form and dropped selections.
+    pub persist_login_email: bool,
+    /// Server/region changes are written when the environment editor is
+    /// confirmed, not while their inputs are being edited.
+    pub persist_login_settings: bool,
     pub region: String,
     pub server: String,
     pub email: String,
@@ -366,6 +416,25 @@ pub struct Warden {
     pub factor: String,
     pub busy: bool,
     pub login_progress: crate::login_progress::LoginProgress,
+    /// The floating sync-progress card is opened only by the footer's sync
+    /// button; it never reserves layout space in the vault.
+    pub sync_progress_open: bool,
+    /// Narrow windows switch panes instead of squeezing three columns.
+    pub compact_sidebar: bool,
+    pub compact_detail: bool,
+    pub sidebar_items_open: bool,
+    pub sidebar_folders_open: bool,
+    pub sidebar_utilities_open: bool,
+    pub palette_modal: plico::ModalState,
+    pub palette_query: String,
+    pub palette_index: usize,
+    pub notifications: VecDeque<AppNotification>,
+    pub notification_seq: u64,
+    pub notification_open: bool,
+    /// Reveal the selected row in the item list once, after selection came
+    /// from the palette, a filter or the initial load.
+    pub reveal_list_selection: bool,
+    pub sidebar_closed_folders: std::collections::BTreeSet<String>,
     pub login_stage: Option<plicowarden_sdk::service::LoginStage>,
     pub generated: Zeroizing<String>,
     pub history: VecDeque<Zeroizing<String>>,
@@ -374,6 +443,7 @@ pub struct Warden {
     pub generator_mode: generator::Mode,
     pub word_count: f64,
     pub reveal_history: bool,
+    pub reveal_card_number: bool,
     pub history_ticket: Option<u64>,
     pub previous_passwords: Vec<(i64, Zeroizing<String>)>,
     pub commands: Vec<HostCommand>,
@@ -381,6 +451,9 @@ pub struct Warden {
     pub settings_saving: bool,
     pub ssh_socket: Option<String>,
     pub ssh_approvals: VecDeque<plicowarden_sdk::ssh_agent::Approval>,
+    pub ssh_view: usize,
+    pub ssh_history: Vec<plicowarden_sdk::ssh_agent::AccessRecord>,
+    pub ssh_history_filter: SshHistoryFilter,
     pub ssh_modal: ModalState,
     ticket: u64,
     save_in_flight: bool,
@@ -396,6 +469,7 @@ impl Default for Warden {
             filter: "All Items".into(),
             selected: "github".into(),
             ascending: true,
+            sort_by_type: false,
             transfer: Default::default(),
             transfer_dialog: false,
             transfer_modal: ModalState::default(),
@@ -408,6 +482,7 @@ impl Default for Warden {
             titlebar_pressed: false,
             reveal: false,
             settings_open: false,
+            settings_modal: plico::ModalState::default(),
             settings_tab: "appearance".into(),
             security: Default::default(),
             active_security: Default::default(),
@@ -421,6 +496,7 @@ impl Default for Warden {
             active_account_id: None,
             adding_account: false,
             offline: false,
+            last_sync_at: None,
             deferred_snapshot: None,
             saved_accounts: Vec::new(),
             accounts_modal: ModalState::default(),
@@ -430,6 +506,8 @@ impl Default for Warden {
             detail_cache: HashMap::new(),
             shown_password: None,
             code: None,
+            code_received_at: None,
+            frame_time: Default::default(),
             editor: None,
             move_modal: ModalState::default(),
             move_ids: Vec::new(),
@@ -445,6 +523,8 @@ impl Default for Warden {
             environment_open: false,
             environment_error: String::new(),
             login_focus: false,
+            persist_login_email: false,
+            persist_login_settings: false,
             region: "us".into(),
             server: String::new(),
             email: String::new(),
@@ -458,12 +538,27 @@ impl Default for Warden {
             factor: String::new(),
             busy: false,
             login_progress: Default::default(),
+            sync_progress_open: false,
+            compact_sidebar: false,
+            compact_detail: false,
+            sidebar_items_open: true,
+            sidebar_folders_open: true,
+            sidebar_utilities_open: true,
+            palette_modal: plico::ModalState::default(),
+            palette_query: String::new(),
+            palette_index: 0,
+            notifications: VecDeque::new(),
+            notification_seq: 0,
+            notification_open: false,
+            reveal_list_selection: false,
+            sidebar_closed_folders: Default::default(),
             login_stage: None,
             generated: Zeroizing::new(String::new()),
             history: VecDeque::new(),
             generator_mode: generator::Mode::Password,
             word_count: 6.,
             reveal_history: false,
+            reveal_card_number: false,
             history_ticket: None,
             previous_passwords: Vec::new(),
             length: 24.,
@@ -473,11 +568,46 @@ impl Default for Warden {
             settings_saving: false,
             ssh_socket: None,
             ssh_approvals: VecDeque::new(),
+            ssh_view: SSH_PERMISSIONS,
+            ssh_history: Vec::new(),
+            ssh_history_filter: SshHistoryFilter::All,
             ssh_modal: ModalState::default(),
             ticket: 0,
             save_in_flight: false,
         }
     }
+}
+fn kind_rank(kind: &str) -> u8 {
+    match kind {
+        "login" => 0,
+        "card" => 1,
+        "identity" => 2,
+        "note" => 3,
+        "ssh-key" => 4,
+        _ => 5,
+    }
+}
+fn now_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs() as i64)
+        .unwrap_or(0)
+}
+fn is_unauthorized(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("401")
+        || error.contains("unauthorized")
+        || error.contains("invalid_grant")
+        || error.contains("token has expired")
+}
+/// A folder's normalized path: trims each `/`-separated segment and joins it
+/// back, so tree rows and item folders compare consistently.
+pub fn folder_path(name: &str) -> String {
+    name.split('/')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 impl Warden {
     pub fn visible(&self) -> Vec<Item> {
@@ -496,6 +626,17 @@ impl Warden {
                     self.filter == "Trash" || !i.archived
                 }) && (!self.filter.starts_with("folder:")
                     || i.folder.as_deref() == Some(&self.filter[7..]))
+                    && (!self.filter.starts_with("path:")
+                        || i.folder.as_deref().is_some_and(|id| {
+                            self.folders
+                                .iter()
+                                .find(|folder| folder.id == id)
+                                .is_some_and(|folder| {
+                                    let path = folder_path(&folder.name);
+                                    let selected = &self.filter[5..];
+                                    path == selected || path.starts_with(&format!("{selected}/"))
+                                })
+                        }))
                     && match self.filter.as_str() {
                         "No folder" => i.folder.is_none(),
                         "Favorites" => i.favorite,
@@ -534,7 +675,14 @@ impl Warden {
             })
             .cloned()
             .collect();
-        result.sort_by(|a, b| a.name.cmp(&b.name));
+        result.sort_by(|a, b| {
+            let rank = if self.sort_by_type {
+                kind_rank(&a.kind).cmp(&kind_rank(&b.kind))
+            } else {
+                std::cmp::Ordering::Equal
+            };
+            rank.then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
         if !self.ascending {
             result.reverse();
         }
@@ -611,7 +759,7 @@ impl Warden {
         }
         self.ticket = self.ticket.wrapping_add(1);
         self.pending = Some(self.ticket);
-        self.busy = !matches!(&request, Request::Details(_));
+        self.busy = !matches!(&request, Request::Details(_) | Request::Totp(_));
         self.login_stage = if matches!(&request, Request::Login { .. }) && self.has_cached_account()
         {
             Some(plicowarden_sdk::service::LoginStage::UnlockingCache)
@@ -622,7 +770,9 @@ impl Warden {
             )
             .then_some(plicowarden_sdk::service::LoginStage::Authenticating)
         };
-        if matches!(&request, Request::Login { .. } | Request::Reconnect { .. }) {
+        if matches!(&request, Request::Sync) {
+            self.login_progress.begin_sync();
+        } else if matches!(&request, Request::Login { .. } | Request::Reconnect { .. }) {
             self.login_progress
                 .begin(matches!(&request, Request::Login { .. }) && self.has_cached_account());
         } else if matches!(&request, Request::TwoFactor(_)) {
@@ -666,6 +816,7 @@ impl Warden {
         });
     }
     pub fn select(&mut self, id: &str) {
+        self.reveal_list_selection = true;
         if self.selected == id {
             return;
         }
@@ -677,19 +828,47 @@ impl Warden {
         self.shown_password = None;
         self.reveal = false;
         self.reveal_history = false;
+        self.reveal_card_number = false;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.code = None;
+        self.code_received_at = None;
         self.notice.clear();
         if self.authenticated {
             self.request(Request::Details(id.into()));
         }
     }
+    /// Move the list selection by one row; returns false for an empty list.
+    pub fn move_selection(&mut self, delta: i32) -> bool {
+        let items = self.visible();
+        if items.is_empty() {
+            return false;
+        }
+        let current = items
+            .iter()
+            .position(|item| item.id == self.selected)
+            .map(|index| index as i32)
+            .unwrap_or(if delta > 0 { -1 } else { items.len() as i32 });
+        let next = (current + delta).clamp(0, items.len() as i32 - 1) as usize;
+        let id = items[next].id.clone();
+        self.select(&id);
+        self.reveal_list_selection = true;
+        true
+    }
+    pub fn clear_search(&mut self) {
+        self.query.clear();
+        self.search_submitted.clear();
+        self.search_ticket = None;
+        self.search_matches = None;
+    }
     pub fn set_filter(&mut self, filter: &str) {
+        self.compact_sidebar = false;
+        self.compact_detail = false;
         self.bulk_selected.clear();
         self.filter = filter.into();
         self.reveal = false;
         self.reveal_history = false;
+        self.reveal_card_number = false;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.shown_password = None;
@@ -711,13 +890,20 @@ impl Warden {
         self.busy = false;
         self.login_stage = None;
         self.login_progress = Default::default();
+        self.sync_progress_open = false;
+        self.compact_sidebar = false;
+        self.compact_detail = false;
         self.authenticated = false;
         self.active_account_id = None;
         self.offline = false;
+        self.last_sync_at = None;
         self.deferred_snapshot = None;
         self.accounts_modal.close();
         self.ssh_socket = None;
         self.ssh_approvals.clear();
+        self.notifications
+            .retain(|notification| notification.kind != NotificationKind::LoginRequest);
+        self.ssh_history.clear();
         self.ssh_modal.close();
         self.items.clear();
         self.folders.clear();
@@ -725,6 +911,7 @@ impl Warden {
         self.details = None;
         self.shown_password = None;
         self.code = None;
+        self.code_received_at = None;
         self.editor = None;
         self.password.clear();
         self.login_password_step = false;
@@ -749,6 +936,7 @@ impl Warden {
         self.previous_passwords.clear();
         self.login_open = true;
         self.settings_open = false;
+        self.settings_modal.close();
         self.folders_modal.close();
         self.confirm_modal.close();
         self.confirm_action = None;
@@ -805,6 +993,7 @@ impl Warden {
             return;
         }
         self.email = self.email.trim().to_owned();
+        self.persist_login_email = true;
         self.error.clear();
         self.notice.clear();
         self.environment_open = false;
@@ -813,6 +1002,7 @@ impl Warden {
         self.login_show_password = false;
     }
     pub fn back_to_email(&mut self) {
+        self.persist_login_email = true;
         if self.busy {
             return;
         }
@@ -820,6 +1010,9 @@ impl Warden {
             self.commands.push(HostCommand::Disconnect);
         }
         self.login_progress = Default::default();
+        self.sync_progress_open = false;
+        self.compact_sidebar = false;
+        self.compact_detail = false;
         self.factors.clear();
         self.password.clear();
         self.otp.clear();
@@ -899,10 +1092,27 @@ impl Warden {
     pub fn snapshot(&mut self, snapshot: VaultSnapshot) {
         self.login_progress
             .finish(snapshot.offline, snapshot.decrypt_failures);
+        self.login_progress.visible = false;
         self.adding_account = false;
         self.deferred_snapshot = None;
         self.authenticated = true;
+        self.notifications
+            .retain(|notification| notification.kind != NotificationKind::SessionExpired);
         self.offline = snapshot.offline;
+        if !self.offline {
+            self.last_sync_at = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|elapsed| elapsed.as_secs() as i64)
+                    .unwrap_or(0),
+            );
+        }
+        if self.active_account_id != snapshot.account_id {
+            // Signing history is vault-scoped public metadata; never carry it
+            // into another account's session.
+            self.ssh_history.clear();
+            self.notifications.clear();
+        }
         self.active_account_id = snapshot.account_id;
         self.search_ticket = None;
         self.search_matches = None;
@@ -953,9 +1163,11 @@ impl Warden {
         self.shown_password = None;
         self.reveal = false;
         self.reveal_history = false;
+        self.reveal_card_number = false;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.code = None;
+        self.code_received_at = None;
         let visible = self.visible();
         if !visible.iter().any(|i| i.id == self.selected) {
             self.selected = visible.first().map(|i| i.id.clone()).unwrap_or_default();
@@ -970,15 +1182,89 @@ impl Warden {
             self.request(Request::Details(self.selected.clone()));
         }
     }
-    fn record_error(&mut self, message: String) {
-        if !self.error.contains(&message) {
-            if !self.error.is_empty() {
-                self.error.push('\n');
+    pub fn expire_session(&mut self) {
+        let email = self.account_email.clone();
+        self.lock();
+        if !email.is_empty() {
+            self.email = email;
+        }
+        self.login_password_step = false;
+        self.notice = "Session expired. Sign in again.".into();
+    }
+    pub fn push_notification(
+        &mut self,
+        kind: NotificationKind,
+        title: impl Into<String>,
+        detail: impl Into<String>,
+        approval_id: Option<u64>,
+    ) {
+        let title = title.into();
+        let detail = detail.into();
+        let now = now_seconds();
+        if let Some(existing) = self.notifications.iter_mut().find(|notification| {
+            notification.kind == kind
+                && notification.title == title
+                && notification.detail == detail
+        }) {
+            existing.at = now;
+            existing.read = false;
+            return;
+        }
+        self.notification_seq += 1;
+        self.notifications.push_front(AppNotification {
+            id: self.notification_seq,
+            kind,
+            title,
+            detail,
+            at: now,
+            read: false,
+            approval_id,
+        });
+        self.notifications.truncate(30);
+    }
+    pub fn unread_notifications(&self) -> usize {
+        self.notifications
+            .iter()
+            .filter(|notification| !notification.read)
+            .count()
+    }
+    pub fn toggle_notifications(&mut self) {
+        if self.notification_open {
+            self.notification_open = false;
+        } else {
+            self.notification_open = true;
+            for notification in &mut self.notifications {
+                if notification.kind != NotificationKind::LoginRequest {
+                    notification.read = true;
+                }
             }
-            self.error.push_str(&message);
         }
     }
+    pub fn clear_read_notifications(&mut self) {
+        self.notifications.retain(|notification| {
+            notification.kind == NotificationKind::LoginRequest || !notification.read
+        });
+    }
+    fn handle_unauthorized(&mut self) {
+        self.push_notification(
+            NotificationKind::SessionExpired,
+            "Session expired",
+            "Sign in again to continue syncing this vault.",
+            None,
+        );
+        self.notice = "Session expired. Sign in to sync.".into();
+    }
+    fn record_error(&mut self, message: String) {
+        self.push_notification(NotificationKind::Error, "Error", message, None);
+    }
     pub fn apply(&mut self, event: plicowarden_sdk::Event) {
+        if self.authenticated
+            && let Err(error) = &event.result
+            && is_unauthorized(error)
+        {
+            self.expire_session();
+            return;
+        }
         if let Ok(Reply::SearchResults { query, ids }) = &event.result {
             if self.search_ticket == Some(event.ticket) && query == &self.query {
                 self.search_ticket = None;
@@ -1010,10 +1296,14 @@ impl Warden {
                 ..
             } => {
                 if self.authenticated {
-                    self.login_progress.fail();
-                    self.notice =
-                        "Using the local vault. You can keep browsing while offline.".into();
-                    self.record_error(format!("Background synchronization failed: {error}"));
+                    if is_unauthorized(&error) {
+                        self.handle_unauthorized();
+                    } else {
+                        self.login_progress.fail();
+                        self.notice =
+                            "Using the local vault. You can keep browsing while offline.".into();
+                        self.record_error(format!("Background synchronization failed: {error}"));
+                    }
                 }
                 return;
             }
@@ -1045,6 +1335,16 @@ impl Warden {
                 .is_some_and(|code| code.expires_at == *expiry)
             {
                 self.code = None;
+                self.code_received_at = None;
+                if self.authenticated
+                    && self
+                        .items
+                        .iter()
+                        .any(|item| item.id == self.selected && item.has_totp)
+                    && !self.selected.is_empty()
+                {
+                    self.request(Request::Totp(self.selected.clone()));
+                }
             }
             return;
         }
@@ -1078,6 +1378,27 @@ impl Warden {
         }
         if event.ticket == 0 {
             match &event.result {
+                Ok(Reply::BackgroundLogin(LoginOutcome::Authenticated { snapshot })) => {
+                    self.filter = "All Items".into();
+                    self.query.clear();
+                    self.snapshot(snapshot.clone());
+                    self.notice = "Vault is up to date.".into();
+                    return;
+                }
+                Ok(Reply::BackgroundLogin(LoginOutcome::TwoFactorRequired { providers })) => {
+                    self.login_open = true;
+                    self.login_password_step = true;
+                    self.login_progress.verification();
+                    self.factor = providers
+                        .iter()
+                        .find(|provider| provider.supported)
+                        .map(|provider| factor_id(provider.id).into())
+                        .unwrap_or_default();
+                    self.factors = providers.clone();
+                    self.login_focus = true;
+                    self.notice = "Verify your identity to finish syncing. Your master password was reused once and has been cleared.".into();
+                    return;
+                }
                 Ok(Reply::SshApproval(approval)) => {
                     if self.authenticated
                         && self.ssh_socket.is_some()
@@ -1085,11 +1406,25 @@ impl Warden {
                     {
                         self.ssh_approvals.push_back(approval.clone());
                         self.ssh_modal.open();
+                        self.push_notification(
+                            NotificationKind::LoginRequest,
+                            "Device signing request",
+                            format!("{} · {}", approval.name, approval.fingerprint),
+                            Some(approval.id),
+                        );
                     }
                     return;
                 }
                 Ok(Reply::SshClosed(id)) => {
                     self.close_ssh_approval(*id);
+                    return;
+                }
+                Ok(Reply::SshAccess(record)) => {
+                    self.record_ssh_access(record.clone());
+                    return;
+                }
+                Ok(Reply::SshHistory(records)) => {
+                    self.ssh_history = records.clone();
                     return;
                 }
                 Ok(Reply::SshStatus(None)) => {
@@ -1196,6 +1531,8 @@ impl Warden {
                     }
                 }
                 Reply::SshClosed(id) => self.close_ssh_approval(id),
+                Reply::SshAccess(record) => self.record_ssh_access(record),
+                Reply::SshHistory(records) => self.ssh_history = records,
                 Reply::SshApproval(_) => {}
                 Reply::Snapshot(snapshot) => self.snapshot(snapshot),
                 Reply::PasswordHistory { id, entries } => {
@@ -1210,16 +1547,25 @@ impl Warden {
                         self.detail_cache.clear();
                     }
                     let details = *boxed;
-                    if self.selected == details.id {
+                    let current = self.selected == details.id;
+                    let generate_totp = current && details.has_totp;
+                    let detail_id = details.id.clone();
+                    if current {
                         self.details = Some(details.clone());
                     }
                     self.detail_cache.insert(details.id.clone(), details);
+                    if generate_totp {
+                        self.request(Request::Totp(detail_id));
+                    }
                 }
                 Reply::Revealed(password) => {
                     self.shown_password = Some(password);
                     self.reveal = true;
                 }
-                Reply::Totp(code) => self.code = Some(code),
+                Reply::Totp(code) => {
+                    self.code_received_at = Some(self.frame_time.now);
+                    self.code = Some(code);
+                }
                 Reply::Edit(edit) => self.editor = Some(Editor::from_edit(edit)),
                 Reply::Mutation(mutation) => {
                     if self.save_in_flight {
@@ -1253,6 +1599,7 @@ impl Warden {
                 }
                 Reply::SearchResults { .. } => unreachable!("search replies handled separately"),
                 Reply::BackgroundSnapshot(_)
+                | Reply::BackgroundLogin(_)
                 | Reply::BackgroundSyncFailed(_)
                 | Reply::BackgroundProgress(_)
                 | Reply::BackgroundSyncPaused => {
@@ -1291,6 +1638,8 @@ impl Warden {
     }
     pub fn close_ssh_approval(&mut self, id: u64) {
         self.ssh_approvals.retain(|approval| approval.id != id);
+        self.notifications
+            .retain(|notification| notification.approval_id != Some(id));
         if self.ssh_approvals.is_empty() {
             self.ssh_modal.close();
         }
@@ -1299,6 +1648,23 @@ impl Warden {
     pub fn decide_ssh(&mut self, id: u64, allow: bool) {
         self.close_ssh_approval(id);
         self.commands.push(HostCommand::SshDecision { id, allow });
+    }
+
+    pub fn record_ssh_access(&mut self, record: plicowarden_sdk::ssh_agent::AccessRecord) {
+        self.ssh_history.insert(0, record);
+        self.ssh_history
+            .truncate(plicowarden_sdk::ssh_agent::HISTORY_CAPACITY);
+    }
+
+    pub fn clear_ssh_history(&mut self) {
+        if self.ssh_history.is_empty() {
+            return;
+        }
+        self.ssh_history.clear();
+        self.commands.push(HostCommand::Account {
+            ticket: 0,
+            request: Box::new(Request::ClearSshHistory),
+        });
     }
 
     pub fn copy_text(&mut self, value: Zeroizing<String>) {

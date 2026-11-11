@@ -101,6 +101,8 @@ fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
     click(&mut ui, "Settings");
     assert!(ui.source.view.app.settings_open);
     assert!(ui.source.take_host_action().is_none());
+    // Settings is a modal sheet: close it before exercising the window drag.
+    click(&mut ui, "Close settings");
     let bounds = ui
         .snapshot()
         .exposed_nodes()
@@ -108,8 +110,9 @@ fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
         .find(|n| n.label.as_deref() == Some("Move window"))
         .unwrap()
         .bounds;
+    // The centered palette trigger sits over the middle of the drag region.
     let position = Point {
-        x: f64::from((bounds[0] + bounds[2]) / 2.),
+        x: f64::from(bounds[0] + 8.),
         y: f64::from((bounds[1] + bounds[3]) / 2.),
     };
     for phase in [PointerPhase::Down, PointerPhase::Up, PointerPhase::Down] {

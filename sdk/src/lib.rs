@@ -42,6 +42,7 @@ pub enum Request {
         id: u64,
         allow: bool,
     },
+    ClearSshHistory,
     Details(String),
     Search(String),
     Reveal(String),
@@ -91,6 +92,7 @@ pub enum Reply {
     LoginProgress(service::LoginStage),
     Snapshot(VaultSnapshot),
     BackgroundSnapshot(VaultSnapshot),
+    BackgroundLogin(LoginOutcome),
     BackgroundSyncFailed(String),
     BackgroundProgress(service::LoginStage),
     BackgroundSyncPaused,
@@ -116,6 +118,8 @@ pub enum Reply {
     SshStatus(Option<String>),
     SshApproval(ssh_agent::Approval),
     SshClosed(u64),
+    SshAccess(ssh_agent::AccessRecord),
+    SshHistory(Vec<ssh_agent::AccessRecord>),
     TotpExpired(i64),
 }
 pub struct Event {
@@ -130,6 +134,18 @@ pub enum SendError {
 struct Work {
     ticket: u64,
     request: Request,
+}
+
+/// Login owns a progress-aware sync transport: response headers and body idle
+/// periods have bounded waits, while a large body may keep making progress for
+/// longer than an arbitrary wall-clock deadline. Other actor operations retain
+/// a defensive total deadline.
+fn operation_timeout(request: &Request) -> Option<Duration> {
+    (!matches!(
+        request,
+        Request::Login { .. } | Request::Reconnect { .. } | Request::TwoFactor(_)
+    ))
+    .then_some(Duration::from_secs(90))
 }
 pub struct Client {
     tx: async_mpsc::Sender<Work>,
@@ -214,7 +230,10 @@ impl Client {
                                 stop_agent(&access, &mut agent, &mut broker, &notify);
                                 code_expiry=None; notify(Event { ticket: 0, result: Ok(Reply::Locked) });
                             }
-                            for id in broker.expire() { notify(Event { ticket: 0, result: Ok(Reply::SshClosed(id)) }); }
+                            for record in broker.expire() {
+                                notify(Event { ticket: 0, result: Ok(Reply::SshClosed(record.id)) });
+                                notify(Event { ticket: 0, result: Ok(Reply::SshAccess(record)) });
+                            }
                             let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d|d.as_secs() as i64).unwrap_or(0);
                             if let Some(expiry)=code_expiry.filter(|expiry|*expiry<=now) {
                                 code_expiry=None;notify(Event {ticket:0,result:Ok(Reply::TotpExpired(expiry))});
@@ -239,14 +258,32 @@ impl Client {
                             let ticket = background.take().expect("completed background task").ticket;
                             let result = match result {
                                 Ok(Ok(())) => {
+                                    service.clear_cached_reauth();
                                     notify(Event {ticket:0,result:Ok(Reply::BackgroundProgress(service::LoginStage::Decrypting))});
                                     match service.background_snapshot().await {
                                     Ok(snapshot) => Reply::BackgroundSnapshot(snapshot),
                                     Err(error) => Reply::BackgroundSyncFailed(error),
                                     }
                                 },
-                                Ok(Err(error)) => Reply::BackgroundSyncFailed(error),
-                                Err(_) => Reply::BackgroundSyncFailed("Background synchronization was cancelled".into()),
+                                Ok(Err(error)) if service::is_unauthorized(&error) => {
+                                    match service.reauthenticate_cached(|stage| {
+                                        notify(Event {ticket:0,result:Ok(Reply::BackgroundProgress(stage))});
+                                    }).await {
+                                        Ok(Some(outcome)) => Reply::BackgroundLogin(outcome),
+                                        Ok(None) => Reply::BackgroundSyncFailed(error),
+                                        Err(reauth) => Reply::BackgroundSyncFailed(format!(
+                                            "The saved session expired and automatic sign-in failed: {reauth}"
+                                        )),
+                                    }
+                                },
+                                Ok(Err(error)) => {
+                                    service.clear_cached_reauth();
+                                    Reply::BackgroundSyncFailed(error)
+                                },
+                                Err(_) => {
+                                    service.clear_cached_reauth();
+                                    Reply::BackgroundSyncFailed("Background synchronization was cancelled".into())
+                                },
                             };
                             notify(Event {ticket,result:Ok(result)});
                             continue;
@@ -279,11 +316,12 @@ impl Client {
                         Request::Details(_) | Request::Reveal(_) | Request::Search(_) |
                         Request::PasswordHistory(_) | Request::Totp(_) | Request::CopyField {..} |
                         Request::CopyText(_) | Request::SshDecision {..} | Request::SshAgent(_) |
-                        Request::ConfigureSecurity(_)) {
+                        Request::ClearSshHistory | Request::ConfigureSecurity(_)) {
                         // Give explicit synchronization and writes priority over a stale download.
                         cancel_background(&mut background).await;
                         notify(Event {ticket:0,result:Ok(Reply::BackgroundSyncPaused)});
                     }
+                    let timeout = operation_timeout(&work.request);
                     let force_online = matches!(&work.request, Request::Reconnect { .. });
                     let operation = async {
                         match work.request {
@@ -305,8 +343,14 @@ impl Client {
                                 }
                             }
                             Request::SshDecision { id, allow } => {
-                                broker.decide(id, allow, &service).await;
+                                if let Some(record) = broker.decide(id, allow, &service).await {
+                                    notify(Event { ticket: 0, result: Ok(Reply::SshAccess(record)) });
+                                }
                                 Ok(Reply::SshClosed(id))
+                            }
+                            Request::ClearSshHistory => {
+                                broker.clear_history();
+                                Ok(Reply::SshHistory(Vec::new()))
                             }
                             Request::Login { config, password } | Request::Reconnect { config, password } => {
                                 if config.email.trim().is_empty() || password.is_empty() {
@@ -324,16 +368,23 @@ impl Client {
                             request => execute(&mut service, request).await,
                         }
                     };
-                    let result = tokio::select! { biased;
-                        _ = closed.changed() => break,
-                        result = tokio::time::timeout(Duration::from_secs(90), operation) => result,
+                    let result = if let Some(timeout) = timeout {
+                        tokio::select! { biased;
+                            _ = closed.changed() => break,
+                            result = tokio::time::timeout(timeout, operation) => result.ok(),
+                        }
+                    } else {
+                        tokio::select! { biased;
+                            _ = closed.changed() => break,
+                            result = operation => Some(result),
+                        }
                     };
                     match result {
-                        Ok(result) => {
+                        Some(result) => {
                             if let Ok(Reply::Totp(code))=&result {code_expiry=Some(code.expires_at);}
                             notify(Event { ticket: work.ticket, result });
                         },
-                        Err(_) => {
+                        None => {
                             cancel_background(&mut background).await;
                             service.lock();
                             stop_agent(&access, &mut agent, &mut broker, &notify);
@@ -377,6 +428,7 @@ impl Client {
         }
     }
 }
+
 impl Drop for Client {
     fn drop(&mut self) {
         self.agent_gate.set(u64::MAX, false);
@@ -405,7 +457,7 @@ async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, 
             service.send_two_factor_email().await?;
             Reply::EmailSent
         }
-        Request::SshAgent(_) | Request::SshDecision { .. } => {
+        Request::SshAgent(_) | Request::SshDecision { .. } | Request::ClearSshHistory => {
             return Err("SSH command must be handled by the account actor.".into());
         }
         Request::Sync => Reply::Snapshot(service.refresh().await?),
@@ -480,6 +532,7 @@ fn observe_activity(
     code_expiry: &mut Option<i64>,
     notify: &impl Fn(Event),
 ) {
+    service.discard_expired_reauth();
     if activity.swap(false, std::sync::atomic::Ordering::Relaxed) && service.note_activity() {
         stop_agent(gate, agent, broker, notify);
         *code_expiry = None;
@@ -498,10 +551,14 @@ fn stop_agent(
 ) {
     gate.revoke();
     let active = agent.take().is_some();
-    for id in broker.clear() {
+    for record in broker.clear() {
         notify(Event {
             ticket: 0,
-            result: Ok(Reply::SshClosed(id)),
+            result: Ok(Reply::SshClosed(record.id)),
+        });
+        notify(Event {
+            ticket: 0,
+            result: Ok(Reply::SshAccess(record)),
         });
     }
     if active {
@@ -509,5 +566,48 @@ fn stop_agent(
             ticket: 0,
             result: Ok(Reply::SshStatus(None)),
         });
+    }
+}
+
+#[cfg(test)]
+mod timeout_tests {
+    use super::*;
+
+    fn login_request() -> LoginRequest {
+        LoginRequest {
+            region: "us".into(),
+            server_url: None,
+            server_config: None,
+            email: "test@example.com".into(),
+        }
+    }
+
+    #[test]
+    fn login_flows_do_not_have_a_total_wall_clock_timeout() {
+        assert!(
+            operation_timeout(&Request::Login {
+                config: login_request(),
+                password: Zeroizing::new("secret".into()),
+            })
+            .is_none()
+        );
+        assert!(
+            operation_timeout(&Request::Reconnect {
+                config: login_request(),
+                password: Zeroizing::new("secret".into()),
+            })
+            .is_none()
+        );
+        assert!(
+            operation_timeout(&Request::TwoFactor(TwoFactorSubmitRequest {
+                provider: "authenticator".into(),
+                token: Zeroizing::new("000000".into()),
+            }))
+            .is_none()
+        );
+        assert_eq!(
+            operation_timeout(&Request::Sync),
+            Some(Duration::from_secs(90))
+        );
     }
 }

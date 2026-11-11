@@ -39,7 +39,7 @@ fn bulk_move_uses_selected_ids_and_rejects_a_removed_destination() {
     app.bulk_mode = true;
     app.bulk_selected.extend(["github".into(), "linear".into()]);
     app.open_move_dialog(app.bulk_selected.iter().cloned().collect());
-    app.move_folder = app.folders[1].id.clone();
+    app.move_folder = app.folders.last().unwrap().id.clone();
     app.folders.pop();
     app.move_items();
     assert!(!app.busy);
@@ -69,7 +69,12 @@ fn unfiled_filter_excludes_archived_and_trashed_items_and_cancel_does_not_write(
         .unwrap()
         .deleted = true;
     app.set_filter("No folder");
-    assert_eq!(app.visible().len(), 9);
+    let expected = app
+        .items
+        .iter()
+        .filter(|item| item.folder.is_none() && !item.deleted && !item.archived)
+        .count();
+    assert_eq!(app.visible().len(), expected);
     assert!(
         app.visible()
             .iter()
