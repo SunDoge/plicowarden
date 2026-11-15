@@ -20,6 +20,7 @@ pub struct Item {
     pub deleted: bool,
     pub archived: bool,
     pub has_totp: bool,
+    pub has_passkey: bool,
 }
 pub fn demo_items() -> Vec<Item> {
     [
@@ -160,6 +161,7 @@ pub fn demo_items() -> Vec<Item> {
         deleted: false,
         archived: false,
         has_totp: false,
+        has_passkey: id == "github",
     })
     .collect()
 }
@@ -392,6 +394,16 @@ pub struct Warden {
     pub account_email: String,
     pub folders: Vec<VaultFolder>,
     pub details: Option<ItemDetails>,
+    /// The newest item-details request. Detail loading is intentionally kept
+    /// separate from the global operation ticket so a row switch never tears
+    /// down the detail pane or makes the whole vault busy.
+    pub detail_ticket: Option<u64>,
+    /// Loading feedback is delayed so a local-cache hit does not paint a
+    /// one-frame spinner that reads as a flash.
+    pub detail_loading_started_at: Option<std::time::Duration>,
+    /// Presentation swap time, sampled from the injected frame clock. The UI
+    /// uses one short opacity animation for the whole keyed pane.
+    pub detail_transition_started_at: Option<std::time::Duration>,
     /// Per-item detail cache (MyGO retains what a view painted): switching
     /// back to an item shows its last details immediately while the refresh
     /// round-trips; the busy state still gates the sensitive actions.
@@ -462,6 +474,7 @@ pub struct Warden {
     pub word_count: f64,
     pub reveal_history: bool,
     pub reveal_card_number: bool,
+    pub shown_card_number: Option<Zeroizing<String>>,
     pub history_ticket: Option<u64>,
     pub previous_passwords: Vec<(i64, Zeroizing<String>)>,
     pub commands: Vec<HostCommand>,
@@ -473,6 +486,8 @@ pub struct Warden {
     pub ssh_history: Vec<plicowarden_sdk::ssh_agent::AccessRecord>,
     pub ssh_history_filter: SshHistoryFilter,
     pub ssh_modal: ModalState,
+    pub auth_requests: VecDeque<plicowarden_sdk::service::AuthRequest>,
+    pub auth_request_modal: ModalState,
     ticket: u64,
     save_in_flight: bool,
 }
@@ -498,7 +513,7 @@ impl Default for Warden {
             sidebar: true,
             sidebar_motion_started_at: None,
             sidebar_motion_from: 1.,
-            custom_titlebar: !cfg!(target_os = "linux"),
+            custom_titlebar: Appearance::default().custom_titlebar,
             titlebar_pressed: false,
             reveal: false,
             settings_open: false,
@@ -523,6 +538,9 @@ impl Default for Warden {
             account_email: String::new(),
             folders: Vec::new(),
             details: None,
+            detail_ticket: None,
+            detail_loading_started_at: None,
+            detail_transition_started_at: None,
             detail_cache: HashMap::new(),
             shown_password: None,
             code: None,
@@ -579,6 +597,7 @@ impl Default for Warden {
             word_count: 6.,
             reveal_history: false,
             reveal_card_number: false,
+            shown_card_number: None,
             history_ticket: None,
             previous_passwords: Vec::new(),
             length: 24.,
@@ -592,6 +611,8 @@ impl Default for Warden {
             ssh_history: Vec::new(),
             ssh_history_filter: SshHistoryFilter::All,
             ssh_modal: ModalState::default(),
+            auth_requests: VecDeque::new(),
+            auth_request_modal: ModalState::default(),
             ticket: 0,
             save_in_flight: false,
         }
@@ -666,6 +687,7 @@ impl Warden {
                         "Secure Notes" => i.kind == "note",
                         "SSH Keys" => i.kind == "ssh-key",
                         "One-time Codes" => i.has_totp,
+                        "Passkeys" => i.has_passkey,
                         _ => true,
                     }
                     && if self.authenticated
@@ -778,8 +800,17 @@ impl Warden {
             return;
         }
         self.ticket = self.ticket.wrapping_add(1);
+        if matches!(&request, Request::Details(_)) {
+            self.detail_ticket = Some(self.ticket);
+            self.detail_loading_started_at = Some(self.frame_time.now);
+            self.commands.push(HostCommand::Account {
+                ticket: self.ticket,
+                request: Box::new(request),
+            });
+            return;
+        }
         self.pending = Some(self.ticket);
-        self.busy = !matches!(&request, Request::Details(_) | Request::Totp(_));
+        self.busy = !matches!(&request, Request::Totp(_));
         self.login_stage = if matches!(&request, Request::Login { .. }) && self.has_cached_account()
         {
             Some(plicowarden_sdk::service::LoginStage::UnlockingCache)
@@ -799,9 +830,7 @@ impl Warden {
             self.login_progress
                 .activate(plicowarden_sdk::service::LoginStage::Authenticating);
         }
-        if !matches!(&request, Request::Details(_)) {
-            self.error.clear();
-        }
+        self.error.clear();
         self.commands.push(HostCommand::Account {
             ticket: self.ticket,
             request: Box::new(request),
@@ -841,14 +870,21 @@ impl Warden {
             return;
         }
         self.selected = id.into();
-        // MyGO retains what the view painted: switching serves the item's
-        // last details immediately (stale-while-revalidate) instead of
-        // collapsing the pane for the round-trip; the reply refreshes it.
-        self.details = self.detail_cache.get(id).cloned();
+        // MyGO retains what the view painted. A cache hit swaps immediately;
+        // on a first visit the previous complete pane stays mounted until the
+        // new details arrive, rather than flashing a structurally different
+        // skeleton tree for one or two frames.
+        if let Some(details) = self.detail_cache.get(id).cloned() {
+            self.detail_transition_started_at = Some(self.frame_time.now);
+            self.details = Some(details);
+        } else if !self.authenticated {
+            self.detail_transition_started_at = Some(self.frame_time.now);
+        }
         self.shown_password = None;
         self.reveal = false;
         self.reveal_history = false;
         self.reveal_card_number = false;
+        self.shown_card_number = None;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.code = None;
@@ -892,6 +928,7 @@ impl Warden {
         self.reveal = false;
         self.reveal_history = false;
         self.reveal_card_number = false;
+        self.shown_card_number = None;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.shown_password = None;
@@ -914,6 +951,7 @@ impl Warden {
         self.reveal = false;
         self.reveal_history = false;
         self.reveal_card_number = false;
+        self.shown_card_number = None;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.shown_password = None;
@@ -942,6 +980,9 @@ impl Warden {
         self.bulk_modal.close();
         self.commands.push(HostCommand::Disconnect);
         self.pending = None;
+        self.detail_ticket = None;
+        self.detail_loading_started_at = None;
+        self.detail_transition_started_at = None;
         self.busy = false;
         self.login_stage = None;
         self.login_progress = Default::default();
@@ -956,10 +997,12 @@ impl Warden {
         self.accounts_modal.close();
         self.ssh_socket = None;
         self.ssh_approvals.clear();
+        self.auth_requests.clear();
         self.notifications
             .retain(|notification| notification.kind != NotificationKind::LoginRequest);
         self.ssh_history.clear();
         self.ssh_modal.close();
+        self.auth_request_modal.close();
         self.items.clear();
         self.folders.clear();
         self.detail_cache.clear();
@@ -1202,6 +1245,7 @@ impl Warden {
                 deleted: i.deleted,
                 archived: i.archived,
                 has_totp: i.has_totp,
+                has_passkey: i.has_passkey,
             })
             .collect();
         self.close_login();
@@ -1219,6 +1263,7 @@ impl Warden {
         self.reveal = false;
         self.reveal_history = false;
         self.reveal_card_number = false;
+        self.shown_card_number = None;
         self.history_ticket = None;
         self.previous_passwords.clear();
         self.code = None;
@@ -1432,8 +1477,70 @@ impl Warden {
             // an older queued worker acknowledgement must not roll them back.
             return;
         }
+        if self.detail_ticket == Some(event.ticket) {
+            self.detail_ticket = None;
+            self.detail_loading_started_at = None;
+            match event.result {
+                Ok(Reply::Details(boxed)) => {
+                    if self.detail_cache.len() >= 512 {
+                        self.detail_cache.clear();
+                    }
+                    let details = *boxed;
+                    let current = self.selected == details.id;
+                    let generate_totp = current && details.has_totp;
+                    let detail_id = details.id.clone();
+                    if current {
+                        if self
+                            .details
+                            .as_ref()
+                            .is_none_or(|shown| shown.id != details.id)
+                        {
+                            self.detail_transition_started_at = Some(self.frame_time.now);
+                        }
+                        self.details = Some(details.clone());
+                    }
+                    self.detail_cache.insert(details.id.clone(), details);
+                    if generate_totp {
+                        self.request(Request::Totp(detail_id));
+                    }
+                }
+                Err(error) => {
+                    // The old pane is still valid. Restore its row highlight
+                    // so the list and detail never disagree after a failed
+                    // first load, and keep the error copyable below the pane.
+                    if let Some(details) = &self.details {
+                        self.selected = details.id.clone();
+                    }
+                    self.error = format!("Could not load item details: {error}");
+                }
+                Ok(_) => {}
+            }
+            return;
+        }
         if event.ticket == 0 {
             match &event.result {
+                Ok(Reply::AuthRequests(requests)) => {
+                    if !self.authenticated {
+                        return;
+                    }
+                    let current: std::collections::HashSet<_> =
+                        requests.iter().map(|request| request.id.as_str()).collect();
+                    self.auth_requests
+                        .retain(|request| current.contains(request.id.as_str()));
+                    for request in requests {
+                        if !self
+                            .auth_requests
+                            .iter()
+                            .any(|pending| pending.id == request.id)
+                        {
+                            self.auth_requests.push_back(request.clone());
+                        }
+                    }
+                    if !self.auth_requests.is_empty() {
+                        self.auth_request_modal.open();
+                    }
+                    return;
+                }
                 Ok(Reply::BackgroundLogin(LoginOutcome::Authenticated { snapshot })) => {
                     self.filter = "All Items".into();
                     self.query.clear();
@@ -1590,6 +1697,20 @@ impl Warden {
                 Reply::SshAccess(record) => self.record_ssh_access(record),
                 Reply::SshHistory(records) => self.ssh_history = records,
                 Reply::SshApproval(_) => {}
+                Reply::AuthRequests(_) => {}
+                Reply::AuthRequestAnswered { id, approved } => {
+                    self.auth_requests.retain(|request| request.id != id);
+                    if self.auth_requests.is_empty() {
+                        self.auth_request_modal.close();
+                    } else {
+                        self.auth_request_modal.open();
+                    }
+                    self.notice = if approved {
+                        "Sign-in approved.".into()
+                    } else {
+                        "Sign-in denied.".into()
+                    };
+                }
                 Reply::Snapshot(snapshot) => self.snapshot(snapshot),
                 Reply::PasswordHistory { id, entries } => {
                     if self.selected == id && self.history_ticket == Some(event.ticket) {
@@ -1598,25 +1719,18 @@ impl Warden {
                     }
                     self.history_ticket = None;
                 }
-                Reply::Details(boxed) => {
-                    if self.detail_cache.len() >= 512 {
-                        self.detail_cache.clear();
-                    }
-                    let details = *boxed;
-                    let current = self.selected == details.id;
-                    let generate_totp = current && details.has_totp;
-                    let detail_id = details.id.clone();
-                    if current {
-                        self.details = Some(details.clone());
-                    }
-                    self.detail_cache.insert(details.id.clone(), details);
-                    if generate_totp {
-                        self.request(Request::Totp(detail_id));
-                    }
+                Reply::Details(_) => {
+                    unreachable!("detail replies use the independent detail ticket")
                 }
                 Reply::Revealed(password) => {
                     self.shown_password = Some(password);
                     self.reveal = true;
+                }
+                Reply::CardNumberRevealed { id, number } => {
+                    if self.selected == id {
+                        self.shown_card_number = Some(number);
+                        self.reveal_card_number = true;
+                    }
                 }
                 Reply::Totp(code) => {
                     self.code_received_at = Some(self.frame_time.now);

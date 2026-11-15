@@ -2,6 +2,7 @@
 pub mod cache;
 mod clipboard;
 pub mod icons;
+mod notifications;
 pub mod protected;
 mod search;
 pub mod security;
@@ -11,7 +12,7 @@ pub mod ssh_agent;
 pub use bitwarden_vault::{FieldType, FieldView};
 
 use service::{
-    EditData, ItemDetails, ItemPatch, LoginOutcome, LoginRequest, Mutation, TotpCode,
+    AuthRequest, EditData, ItemDetails, ItemPatch, LoginOutcome, LoginRequest, Mutation, TotpCode,
     TwoFactorSubmitRequest, VaultService, VaultSnapshot,
 };
 use snafu::Snafu;
@@ -36,6 +37,11 @@ pub enum Request {
     SendEmail,
     Sync,
     BackgroundSync,
+    PendingAuthRequests,
+    AnswerAuthRequest {
+        id: String,
+        approve: bool,
+    },
     ForgetAccount(String),
     SshAgent(bool),
     SshDecision {
@@ -46,6 +52,7 @@ pub enum Request {
     Details(String),
     Search(String),
     Reveal(String),
+    RevealCardNumber(String),
     PasswordHistory(String),
     Totp(String),
     CopyField {
@@ -96,6 +103,11 @@ pub enum Reply {
     BackgroundSyncFailed(String),
     BackgroundProgress(service::LoginStage),
     BackgroundSyncPaused,
+    AuthRequests(Vec<AuthRequest>),
+    AuthRequestAnswered {
+        id: String,
+        approved: bool,
+    },
     SavedAccounts(Vec<cache::SavedAccount>),
     Details(Box<ItemDetails>),
     SearchResults {
@@ -103,6 +115,10 @@ pub enum Reply {
         ids: Vec<String>,
     },
     Revealed(Zeroizing<String>),
+    CardNumberRevealed {
+        id: String,
+        number: Zeroizing<String>,
+    },
     PasswordHistory {
         id: String,
         entries: Vec<(i64, Zeroizing<String>)>,
@@ -176,6 +192,20 @@ async fn cancel_background(task: &mut Option<BackgroundTask>) {
     }
 }
 
+fn restart_notifications(service: &VaultService, task: &mut Option<notifications::Task>) {
+    *task = service
+        .notification_source()
+        .map(|(url, state)| notifications::spawn(url, state));
+}
+
+fn authenticated_reply(reply: &Reply) -> bool {
+    matches!(
+        reply,
+        Reply::Login(LoginOutcome::Authenticated { .. })
+            | Reply::BackgroundLogin(LoginOutcome::Authenticated { .. })
+    )
+}
+
 impl Client {
     pub fn new() -> Self {
         Self::with_security(Default::default())
@@ -219,15 +249,20 @@ impl Client {
                 let mut interval = tokio::time::interval(Duration::from_secs(1));
                 let mut code_expiry: Option<i64> = None;
                 let mut background: Option<BackgroundTask> = None;
+                let mut notifications: Option<notifications::Task> = None;
                 loop {
                     observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
-                    if service.is_locked() { cancel_background(&mut background).await; }
+                    if service.is_locked() {
+                        cancel_background(&mut background).await;
+                        notifications = None;
+                    }
                     let work = tokio::select! { biased;
                         _ = closed.changed() => break,
                         _ = interval.tick() => {
                             observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
                             if service.lock_if_idle() {
                                 stop_agent(&access, &mut agent, &mut broker, &notify);
+                                notifications=None;
                                 code_expiry=None; notify(Event { ticket: 0, result: Ok(Reply::Locked) });
                             }
                             for record in broker.expire() {
@@ -237,6 +272,23 @@ impl Client {
                             let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d|d.as_secs() as i64).unwrap_or(0);
                             if let Some(expiry)=code_expiry.filter(|expiry|*expiry<=now) {
                                 code_expiry=None;notify(Event {ticket:0,result:Ok(Reply::TotpExpired(expiry))});
+                            }
+                            continue;
+                        },
+                        signal = async {
+                            notifications
+                                .as_mut()
+                                .expect("notification task is present")
+                                .receiver
+                                .recv()
+                                .await
+                        }, if notifications.is_some() => {
+                            if signal.is_none() {
+                                notifications=None;
+                            } else if !service.is_locked()
+                                && let Ok(requests)=service.pending_auth_requests().await
+                            {
+                                notify(Event {ticket:0,result:Ok(Reply::AuthRequests(requests))});
                             }
                             continue;
                         },
@@ -285,6 +337,9 @@ impl Client {
                                     Reply::BackgroundSyncFailed("Background synchronization was cancelled".into())
                                 },
                             };
+                            if authenticated_reply(&result) {
+                                restart_notifications(&service, &mut notifications);
+                            }
                             notify(Event {ticket,result:Ok(result)});
                             continue;
                         },
@@ -294,12 +349,18 @@ impl Client {
                         cancel_background(&mut background).await;
                         stop_agent(&access, &mut agent, &mut broker, &notify);
                     }
+                    if matches!(&work.request, Request::Login { .. } | Request::Reconnect {..} | Request::TwoFactor(_)) {
+                        notifications=None;
+                    }
                     observe_activity(&mut service, &worker_activity, &access, &mut agent, &mut broker, &mut code_expiry, &notify);
                     if service.lock_if_idle() {
                         stop_agent(&access, &mut agent, &mut broker, &notify);
                         notify(Event { ticket: 0, result: Ok(Reply::Locked) });
                     }
-                    if service.is_locked() { cancel_background(&mut background).await; }
+                    if service.is_locked() {
+                        cancel_background(&mut background).await;
+                        notifications=None;
+                    }
                     if matches!(&work.request,Request::BackgroundSync) {
                         if background.is_none() {
                             match service.spawn_background_sync() {
@@ -313,10 +374,11 @@ impl Client {
                         continue;
                     }
                     if background.is_some() && !matches!(&work.request,
-                        Request::Details(_) | Request::Reveal(_) | Request::Search(_) |
+                        Request::Details(_) | Request::Reveal(_) | Request::RevealCardNumber(_) | Request::Search(_) |
                         Request::PasswordHistory(_) | Request::Totp(_) | Request::CopyField {..} |
                         Request::CopyText(_) | Request::SshDecision {..} | Request::SshAgent(_) |
-                        Request::ClearSshHistory | Request::ConfigureSecurity(_)) {
+                        Request::ClearSshHistory | Request::ConfigureSecurity(_) |
+                        Request::PendingAuthRequests | Request::AnswerAuthRequest {..}) {
                         // Give explicit synchronization and writes priority over a stale download.
                         cancel_background(&mut background).await;
                         notify(Event {ticket:0,result:Ok(Reply::BackgroundSyncPaused)});
@@ -382,10 +444,14 @@ impl Client {
                     match result {
                         Some(result) => {
                             if let Ok(Reply::Totp(code))=&result {code_expiry=Some(code.expires_at);}
+                            if result.as_ref().is_ok_and(authenticated_reply) {
+                                restart_notifications(&service, &mut notifications);
+                            }
                             notify(Event { ticket: work.ticket, result });
                         },
                         None => {
                             cancel_background(&mut background).await;
+                            notifications=None;
                             service.lock();
                             stop_agent(&access, &mut agent, &mut broker, &notify);
                             notify(Event { ticket: work.ticket, result: Err("The request timed out. Connect to your account again.".into()) });
@@ -394,6 +460,7 @@ impl Client {
                     }
                 }
                 cancel_background(&mut background).await;
+                drop(notifications);
                 stop_agent(&access, &mut agent, &mut broker, &notify);
                 service.lock();
             });
@@ -465,6 +532,14 @@ async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, 
             Ok(snapshot) => Reply::BackgroundSnapshot(snapshot),
             Err(error) => Reply::BackgroundSyncFailed(error),
         },
+        Request::PendingAuthRequests => Reply::AuthRequests(service.pending_auth_requests().await?),
+        Request::AnswerAuthRequest { id, approve } => {
+            service.answer_auth_request(&id, approve).await?;
+            Reply::AuthRequestAnswered {
+                id,
+                approved: approve,
+            }
+        }
         Request::ForgetAccount(id) => {
             if let Some(root) = cache::directory() {
                 cache::forget(&root, &id)?;
@@ -483,6 +558,10 @@ async fn execute(service: &mut VaultService, request: Request) -> Result<Reply, 
             id,
         },
         Request::Reveal(id) => Reply::Revealed(service.reveal_password(&id).await?),
+        Request::RevealCardNumber(id) => Reply::CardNumberRevealed {
+            number: service.reveal_card_number(&id).await?,
+            id,
+        },
         Request::Totp(id) => Reply::Totp(service.totp_code(&id).await?),
         Request::CopyField { id, field } => {
             service.copy_field(&id, &field).await?;

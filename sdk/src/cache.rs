@@ -76,6 +76,14 @@ impl State {
             .map_err(|_| "Could not restore cached login method")?;
         Ok(())
     }
+    pub(crate) async fn access_token(&self) -> Option<Zeroizing<String>> {
+        let mut tokens = self.tokens.get().await.ok().flatten()?;
+        let access_token = Zeroizing::new(std::mem::take(&mut tokens.access_token));
+        if let Some(refresh_token) = &mut tokens.refresh_token {
+            refresh_token.zeroize();
+        }
+        Some(access_token)
+    }
 }
 pub fn directory() -> Option<PathBuf> {
     directories::ProjectDirs::from("", "", "Plicowarden")

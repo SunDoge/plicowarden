@@ -3,7 +3,7 @@ import { demoVault, viewports } from "./fixtures/vault.ts";
 
 export default suite(matrix(viewports, viewport => recipe(`login-${viewport.name}`, {
   state: demoVault({ screen: "login", custom_titlebar: true }), viewport,
-  steps: [capture("email"), click(button("bitwarden.com")), click(button("Self-hosted")),
+  steps: [capture("email"), click(button("Change server")), click(button("Self-hosted")),
     fill("Server URL", "http://example.invalid"), click(button("Done")),
     expectText("Use HTTPS (local HTTP is allowed only in debug builds)."), capture("invalid-server"),
     fill("Server URL", "https://vault.example.invalid"), capture("self-hosted"), click(button("Done")),

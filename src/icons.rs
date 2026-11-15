@@ -21,6 +21,7 @@ pub fn get(name: &str) -> &'static SvgAsset {
         "eye" => &lucide_icons::EYE,
         "copy" => &lucide_icons::COPY,
         "external" => &lucide_icons::EXTERNAL_LINK,
+        "globe" => &lucide_icons::GLOBE,
         "lock" => &lucide_icons::LOCK,
         "plus" => &lucide_icons::PLUS,
         "sidebar" => &lucide_icons::PANEL_LEFT,

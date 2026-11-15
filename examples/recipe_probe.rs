@@ -99,9 +99,7 @@ fn check(case: &Case) -> Result<(), Error> {
         }
     }
     if driver
-        .source
-        .adapter
-        .placed
+        .placed_nodes()
         .iter()
         .any(|node| !node.rect.iter().all(|n| n.is_finite()))
     {

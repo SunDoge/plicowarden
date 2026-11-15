@@ -1,7 +1,5 @@
-use plico_runtime::{
-    NativeApp,
-    testing::{Command, Driver},
-};
+use plico_desktop::NativeApp;
+use plico_runtime::testing::{Command, Driver};
 use plicowarden::{PreviewConfig, Warden, model::HostCommand, transfer::TransferIntent};
 use zeroize::Zeroizing;
 #[test]

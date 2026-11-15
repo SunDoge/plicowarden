@@ -1,7 +1,5 @@
-use plico_runtime::{
-    NativeApp,
-    testing::{Command, Driver},
-};
+use plico_desktop::NativeApp;
+use plico_runtime::testing::{Command, Driver};
 use plicowarden::{PreviewConfig, Warden, model::HostCommand};
 use plicowarden_sdk::Request;
 
@@ -30,22 +28,22 @@ fn bulk_selection_is_independent_of_details_and_destructive_actions_require_conf
     click(&mut ui, "Bulk selection");
     click(&mut ui, "Toggle bulk selection for GitHub");
     click(&mut ui, "Toggle bulk selection for Linear");
-    assert_eq!(ui.source.view.0.selected, "github");
-    assert_eq!(ui.source.view.0.bulk_selected.len(), 2);
+    assert_eq!(ui.view().0.selected, "github");
+    assert_eq!(ui.view().0.bulk_selected.len(), 2);
     click(&mut ui, "Trash selected");
-    assert!(!ui.source.view.0.busy);
-    assert!(ui.source.view.0.bulk_modal.is_open());
+    assert!(!ui.view().0.busy);
+    assert!(ui.view().0.bulk_modal.is_open());
     click(&mut ui, "Cancel bulk action");
     ui.advance(std::time::Duration::from_millis(250)).unwrap();
-    assert!(!ui.source.view.0.busy);
+    assert!(!ui.view().0.busy);
     click(&mut ui, "Trash selected");
     click(&mut ui, "Confirm bulk action");
-    assert!(ui.source.view.0.busy);
-    assert!(ui.source.view.0.commands.iter().any(|command| matches!(command,
+    assert!(ui.view().0.busy);
+    assert!(ui.view().0.commands.iter().any(|command| matches!(command,
         HostCommand::Account { request, .. } if matches!(request.as_ref(), Request::BatchAction { ids, action } if ids == &["github", "linear"] && action == "trash"))));
-    ui.source.view.0.lock();
-    assert!(ui.source.view.0.bulk_selected.is_empty());
-    assert!(!ui.source.view.0.bulk_modal.is_open());
+    ui.update_view(|view| view.0.lock()).unwrap();
+    assert!(ui.view().0.bulk_selected.is_empty());
+    assert!(!ui.view().0.bulk_modal.is_open());
 }
 #[test]
 fn demo_cannot_send_bulk_mutations_and_filters_clear_selection() {
@@ -93,6 +91,7 @@ fn partial_bulk_results_keep_failed_ids_and_report_successes() {
                     has_username: true,
                     has_password: true,
                     has_totp: false,
+                    has_passkey: false,
                     icon_url: None,
                     folder_id: None,
                     deleted: false,

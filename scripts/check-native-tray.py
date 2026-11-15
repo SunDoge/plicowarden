@@ -114,7 +114,7 @@ def main():
                     menu = dbus.Interface(bus.get_object(service, menu_path), 'com.canonical.dbusmenu')
                     _, layout = menu.GetLayout(0, -1, [])
                     entries = {str(child[1].get('label', '')): int(child[0]) for child in layout[2]}
-                    for label in ['Open Plicowarden', 'Lock vault', 'Quit Plicowarden', 'Keep running when closed', 'SSH approval notifications']:
+                    for label in ['Open Plicowarden', 'Lock vault', 'Quit Plicowarden', 'Keep running when closed', 'Approval notifications']:
                         assert label in entries, entries
                     # Give the watcher probe time to report availability before closing.
                     wait(lambda: time.monotonic() - started > 4, 'watcher check')
@@ -136,7 +136,7 @@ def main():
                     wait(visible, 'notification activation did not restore window')
                     choose('Lock vault')
                     assert app.poll() is None
-                    choose('SSH approval notifications')
+                    choose('Approval notifications')
                     wait(lambda: any(Path(temporary).rglob('desktop.json')), 'preferences were not persisted')
                     saved = next(Path(temporary).rglob('desktop.json')).read_text()
                     assert '"sshNotifications": false' in saved

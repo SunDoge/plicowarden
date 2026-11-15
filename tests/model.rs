@@ -83,6 +83,37 @@ fn lock_erases_editor_buffers_and_stale_replies_cannot_reveal_values() {
     assert!(app.shown_password.is_none());
     assert!(!app.reveal);
 }
+
+#[test]
+fn card_number_is_revealed_on_demand_and_cleared_when_selection_changes() {
+    let mut app = Warden::default();
+    app.authenticated = true;
+    app.selected = "amex".into();
+    app.request(Request::RevealCardNumber("amex".into()));
+    let ticket = app.pending.unwrap();
+    assert!(matches!(
+        app.commands.last(),
+        Some(HostCommand::Account { request, .. })
+            if matches!(request.as_ref(), Request::RevealCardNumber(id) if id == "amex")
+    ));
+
+    app.apply(Event {
+        ticket,
+        result: Ok(Reply::CardNumberRevealed {
+            id: "amex".into(),
+            number: Zeroizing::new("3782 822463 10005".into()),
+        }),
+    });
+    assert!(app.reveal_card_number);
+    assert_eq!(
+        app.shown_card_number.as_deref().map(String::as_str),
+        Some("3782 822463 10005")
+    );
+
+    app.select("github");
+    assert!(!app.reveal_card_number);
+    assert!(app.shown_card_number.is_none());
+}
 #[test]
 fn generator_uses_each_requested_character_group_and_length() {
     for symbols in [true, false] {
@@ -100,10 +131,14 @@ fn generator_uses_each_requested_character_group_and_length() {
 fn appearance_is_the_only_persisted_projection_and_roundtrips() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("appearance.json");
-    let value = plicowarden::appearance::Appearance { ui_scale: 0.85 };
+    let value = plicowarden::appearance::Appearance {
+        ui_scale: 0.85,
+        custom_titlebar: true,
+    };
     value.save(&path).unwrap();
     let restored = plicowarden::appearance::Appearance::load(&path).unwrap();
     assert_eq!(restored.ui_scale, 0.85);
+    assert!(restored.custom_titlebar);
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(!text.contains("password"));
     assert!(!text.contains("items"));

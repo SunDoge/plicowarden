@@ -46,6 +46,52 @@ fn region_selector(ui: &mut UiContext, selected: &mut usize, disabled: bool) {
         }
     };
 }
+
+fn compact_server_target(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return "Choose a server".into();
+    }
+    plicowarden_sdk::server::validate_url(value)
+        .unwrap_or_else(|_| value.trim_end_matches('/').to_owned())
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_owned()
+}
+
+#[component]
+#[rustfmt::skip]
+fn login_server_identity(
+    ui: &mut UiContext,
+    target: &str,
+    description: &str,
+    disabled: bool,
+) -> bool {
+    let mut change = false;
+    surface(ui).width_percent(100.).padding_x(12).padding_y(9).gap(10)
+        .radius(11.).border(1., EDGE).background(Color::Control) + |ui| {
+        row(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
+            column(ui).width(30.).height(30.).shrink(0.).radius(9.)
+                .align(Align::Center).justify(Justify::Center)
+                .background(Color::Panel).border(1., EDGE) + |ui| {
+                glyph(ui, "globe", 15., Color::Accent);
+            };
+            column(ui).width(0.).grow(1.).min_width(0.).gap(2) + |ui| {
+                text(ui, target).font_size(13).weight(650).color(INK)
+                    .width_percent(100.).ellipsis(true);
+                text(ui, description).font_size(11).color(MUTED)
+                    .width_percent(100.).ellipsis(true);
+            };
+            if button(ui).text("Change server").ghost().height(28.).padding_x(8)
+                .disabled(disabled).clicked()
+            {
+                change = true;
+            }
+        };
+    };
+    change
+}
 fn entries(values: &[(&str, &str)]) -> Vec<(String, String)> {
     values
         .iter()
@@ -150,6 +196,40 @@ fn login_brand(ui: &mut UiContext, width: f32) {
 }
 
 impl Warden {
+    fn login_server_target(&self) -> String {
+        match self.region.as_str() {
+            "us" => "bitwarden.com".into(),
+            "eu" => "bitwarden.eu".into(),
+            _ => compact_server_target(if !self.server.trim().is_empty() {
+                &self.server
+            } else if !self.identity_url.trim().is_empty() {
+                &self.identity_url
+            } else {
+                &self.api_url
+            }),
+        }
+    }
+
+    fn login_server_description(&self) -> &'static str {
+        match self.region.as_str() {
+            "us" => "Bitwarden · United States",
+            "eu" => "Bitwarden · Europe",
+            _ if self.server.trim().is_empty() => "Self-hosted · custom endpoints",
+            _ => "Self-hosted server",
+        }
+    }
+
+    fn edit_login_server(&mut self) {
+        if self.busy {
+            return;
+        }
+        if self.login_password_step || !self.factors.is_empty() {
+            self.back_to_email();
+        }
+        self.environment_error.clear();
+        self.environment_open = true;
+    }
+
     #[component]
     #[rustfmt::skip]
     pub fn account(&mut self, ui: &mut UiContext) {
@@ -233,28 +313,24 @@ impl Warden {
                         text(ui, "Sign in to your Plicowarden vault.").font_size(13).color(MUTED);
                     }
                 };
-                surface(ui).width_percent(100.).padding(24).gap(16) + |ui| {
+                glass_surface(ui).width_percent(100.).padding(24).gap(16) + |ui| {
+                    let server_target = self.login_server_target();
+                    let server_description = self.login_server_description();
+                    if login_server_identity(
+                        ui,
+                        &server_target,
+                        server_description,
+                        self.busy,
+                    ) {
+                        self.edit_login_server();
+                    }
                     if self.factors.is_empty() {
                         if !self.login_password_step {
-                            row(ui).width_percent(100.).gap(6).align(Align::Center) + |ui| {
-                                text(ui, "Server").font_size(12).color(MUTED);
-                                let label = match self.region.as_str() {
-                                    "us" => "bitwarden.com",
-                                    "eu" => "bitwarden.eu",
-                                    _ => "Self-hosted server",
-                                };
-                                if button(ui).icon(crate::icons::get("external")).text(label).ghost()
-                                    .color(Color::Accent).disabled(self.busy).clicked()
-                                {
-                                    self.environment_open = !self.environment_open;
-                                    self.environment_error.clear();
-                                }
-                            };
                             column(ui).width_percent(100.).gap(8) + |ui| {
                                 text(ui, "Email address").font_size(14).weight(600).color(INK);
                                 let submitted = field_input(text_input_string(ui, "Email address", &mut self.email))
                                     .autofocus(true).request_focus(focus).placeholder("you@example.com")
-                                    .width_percent(100.).disabled(self.busy).response().submitted;
+                                    .width_percent(100.).disabled(self.busy).response().submitted();
                                 if submitted {
                                     self.continue_login();
                                 }
@@ -269,21 +345,41 @@ impl Warden {
                         } else {
                             column(ui).width_percent(100.).gap(8) + |ui| {
                                 text(ui, "Master password").font_size(14).weight(600).color(INK);
-                                let submitted = field_input(text_input(ui, "Master password", &self.password))
-                                    .autofocus(true).request_focus(focus)
-                                    .password_visible(self.login_show_password).width_percent(100.)
-                                    .disabled(self.busy).response().submitted;
+                                let mut toggle_password = false;
+                                let mut submitted = false;
+                                column(ui).position(plico::Position::Relative).width_percent(100.) + |ui| {
+                                    submitted = field_input(text_input(ui, "Master password", &self.password))
+                                        .autofocus(true).request_focus(focus)
+                                        .password_visible(self.login_show_password).width_percent(100.)
+                                        .padding_right(42.).disabled(self.busy).response().submitted();
+                                    toggle_password = (button_base(
+                                        ui,
+                                        if self.login_show_password {
+                                            "Hide master password"
+                                        } else {
+                                            "Show master password"
+                                        },
+                                    ).position(plico::Position::Absolute).inset_right(4.).inset_top(4.)
+                                        .width(28.).height(28.).padding(6.).radius(6.)
+                                        .background(Color::Panel).background_alpha(0.)
+                                        .hover_background(Color::Literal(0xeeeaf3))
+                                        .disabled(self.busy) + |ui| {
+                                        glyph(
+                                            ui,
+                                            if self.login_show_password { "eye-off" } else { "eye" },
+                                            16.,
+                                            MUTED,
+                                        );
+                                    }).response.clicked();
+                                };
+                                if toggle_password {
+                                    self.login_show_password = !self.login_show_password;
+                                    ui.request_rebuild();
+                                }
                                 if submitted {
                                     self.login();
                                 }
                             };
-                            checkbox(ui, "Show master password", &mut self.login_show_password).disabled(self.busy);
-                            match self.region.as_str() {
-                                "us" | "eu" => {}
-                                _ => {
-                                    text!(ui, "Self-hosted: {}", self.server);
-                                }
-                            }
                             if button(ui).text(if self.busy {
                                     "Logging in…"
                                 } else if self.has_cached_account() { "Unlock" } else { "Sign in" })
@@ -323,7 +419,7 @@ impl Warden {
                             text(ui, "Verification code").font_size(14).weight(600).color(INK);
                             let submitted = field_input(text_input(ui, "Verification code", &self.otp))
                                 .autofocus(true).request_focus(focus).width_percent(100.)
-                                .disabled(self.busy).response().submitted;
+                                .disabled(self.busy).response().submitted();
                             if button(ui).text(if self.busy { "Verifying…" } else { "Verify" }).primary()
                                 .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .width_percent(100.).disabled(self.busy || self.otp.is_empty()).clicked()
@@ -343,10 +439,6 @@ impl Warden {
                         }
                     }
                     self.login_progress_ui(ui);
-                    if self.busy && self.region == "self-hosted" {
-                        text(ui, &self.server).color(MUTED).font_size(12).width_percent(100.)
-                            .ellipsis(true);
-                    }
                     if self.busy
                         && button(ui).icon(crate::icons::get("close")).text("Cancel sign-in").ghost()
                             .clicked()
@@ -369,7 +461,7 @@ impl Warden {
                     }
                 };
                 if !self.login_password_step && self.factors.is_empty() && self.environment_open {
-                            surface(ui).padding(20).gap(12) + |ui| {
+                            glass_surface(ui).padding(20).gap(12) + |ui| {
                                 text(ui, "Server").font_size(16).weight(650);
                                 let mut region = match self.region.as_str() {
                                     "us" => 1,
@@ -445,7 +537,8 @@ impl Warden {
     #[rustfmt::skip]
     pub fn accounts_ui(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.accounts_modal);
-        modal(ui, &mut state).title("Accounts").width(520.).children(|ui| {
+        modal(ui, &mut state).title("Accounts").width(520.)
+            .material(dialog_glass()).children(|ui| {
             text(ui, "Saved accounts stay encrypted on this device.")
                 .font_size(12).color(MUTED).width_percent(100.);
             if self.saved_accounts.is_empty() {
@@ -672,7 +765,8 @@ impl Warden {
     pub fn move_dialog(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.move_modal);
         let mut confirmed = false;
-        modal(ui, &mut state).title("Move to folder").width(440.).children(|ui| {
+        modal(ui, &mut state).title("Move to folder").width(440.)
+            .material(dialog_glass()).children(|ui| {
             text!(
                 ui,
                 "Choose a destination for {} item{}.",
@@ -709,7 +803,8 @@ impl Warden {
     #[rustfmt::skip]
     pub fn folder_manager(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.folders_modal);
-        modal(ui, &mut state).header(false).title("Folders").width(560.).children(|ui| {
+        modal(ui, &mut state).header(false).title("Folders").width(560.)
+            .material(dialog_glass()).children(|ui| {
             text(ui, "Folders").font_size(24).weight(700);
             text(ui, "Organize your personal vault. Folder names are encrypted.").width_percent(100.).color(MUTED);
             let list_height = (self.folders.len() as f32 * 42.).clamp(42., 360.);
@@ -792,7 +887,8 @@ impl Warden {
                 "Move to trash",
             ),
         };
-        modal(ui, &mut state).title(title).width(480.).children(|ui| {
+        modal(ui, &mut state).title(title).width(480.)
+            .material(dialog_glass()).children(|ui| {
             text(ui, title).font_size(24).weight(700);
             text(ui, message).width_percent(100.).color(MUTED);
             row(ui).width_percent(100.).justify(Justify::End).gap(10) + |ui| {
@@ -827,7 +923,8 @@ impl Warden {
             state.close();
         }
         let mut decision = None;
-        modal(ui, &mut state).title("SSH signing request").width(560.).children(|ui| {
+        modal(ui, &mut state).title("SSH signing request").width(560.)
+            .material(dialog_glass()).children(|ui| {
             let Some(approval) = approval.as_ref() else { return; };
             column(ui).gap(16).width_percent(100.) + |ui| {
                 text(ui, "Allow one SSH signature?").font_size(24).weight(700).width_percent(100.);
@@ -859,6 +956,85 @@ impl Warden {
 impl Warden {
     #[component]
     #[rustfmt::skip]
+    pub fn auth_request_ui(&mut self, ui: &mut UiContext) {
+        let request = self.auth_requests.front().cloned();
+        let mut state = std::mem::take(&mut self.auth_request_modal);
+        if request.is_none() {
+            state.close();
+        }
+        let mut decision = None;
+        modal(ui, &mut state).title("Sign-in request").width(520.)
+            .material(dialog_glass()).children(|ui| {
+            let Some(request) = request.as_ref() else { return; };
+            column(ui).gap(16).width_percent(100.) + |ui| {
+                row(ui).gap(12).align(Align::Center).width_percent(100.) + |ui| {
+                    column(ui).width(38.).height(38.).shrink(0.).radius(11.)
+                        .background(Color::Control).align(Align::Center).justify(Justify::Center) + |ui| {
+                        glyph(ui, "shield", 19., Color::Accent);
+                    };
+                    column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
+                        text(ui, "Are you trying to sign in?").font_size(20).weight(700)
+                            .width_percent(100.);
+                        text!(ui, "A device wants to open {} without the master password.", self.account_email)
+                            .font_size(12).color(MUTED).width_percent(100.);
+                    };
+                };
+                column(ui).width_percent(100.).gap(0).padding(12).radius(10.)
+                    .background(Color::Control) + |ui| {
+                    approval_detail_row(ui, "Device", &request.device_type);
+                    approval_detail_row(ui, "IP address", &request.ip_address);
+                    if let Some(country) = &request.country {
+                        approval_detail_row(ui, "Location", country);
+                    }
+                    if let Some(created) = &request.created {
+                        approval_detail_row(ui, "Asked", created);
+                    }
+                    approval_detail_row(ui, "Server", &self.login_server_target());
+                };
+                column(ui).width_percent(100.).gap(6) + |ui| {
+                    text(ui, "Fingerprint phrase").font_size(11).weight(650).color(MUTED);
+                    column(ui).width_percent(100.).selectable(true) + |ui| {
+                        text(ui, &request.fingerprint).font_size(14).weight(650)
+                            .width_percent(100.);
+                    };
+                    text(ui, "Approve only if this phrase matches the one on the other device.")
+                        .font_size(11).color(MUTED).width_percent(100.);
+                };
+                row(ui).gap(10).justify(Justify::End).width_percent(100.) + |ui| {
+                    if button(ui).icon(crate::icons::get("close")).text("Deny").disabled(self.busy).clicked() {
+                        decision = Some(false);
+                    }
+                    if button(ui).icon(crate::icons::get("check")).text(if self.busy { "Answering…" } else { "Approve" })
+                        .primary().disabled(self.busy).clicked() {
+                        decision = Some(true);
+                    }
+                };
+            };
+        });
+        if !state.is_open() && decision.is_none() && !self.busy {
+            decision = Some(false);
+        }
+        self.auth_request_modal = state;
+        if let (Some(approve), Some(request)) = (decision, request) {
+            self.auth_request_modal.open();
+            self.request(Request::AnswerAuthRequest { id: request.id, approve });
+            ui.request_rebuild();
+        }
+    }
+}
+
+#[component]
+#[rustfmt::skip]
+fn approval_detail_row(ui: &mut UiContext, label: &str, value: &str) {
+    row(ui).width_percent(100.).min_height(27.).align(Align::Center).gap(12) + |ui| {
+        text(ui, label).font_size(11).color(MUTED).width(92.).shrink(0.);
+        text(ui, value).font_size(12).weight(550).width(0.).grow(1.).ellipsis(true);
+    };
+}
+
+impl Warden {
+    #[component]
+    #[rustfmt::skip]
     pub fn login_progress_ui(&mut self, ui: &mut UiContext) {
         if !self.login_progress.visible || self.login_progress.steps.is_empty() {
             return;
@@ -866,7 +1042,11 @@ impl Warden {
         let mut hide = false;
         column(ui).width_percent(100.).gap(10).padding(12).radius(8.).background(Color::Control) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
-                text(ui, "Connection progress").font_size(13).weight(600).width(0.).grow(1.);
+                column(ui).width(0.).grow(1.).min_width(0.).gap(2) + |ui| {
+                    text(ui, "Connection progress").font_size(13).weight(600);
+                    text!(ui, "Target · {}", self.login_server_target())
+                        .font_size(11).color(MUTED).width_percent(100.).ellipsis(true);
+                };
                 if !self.router.show(Page::Login)
                     && button(ui).text("Hide progress").ghost().height(28.).clicked()
                 {

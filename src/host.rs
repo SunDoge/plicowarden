@@ -29,6 +29,8 @@ pub struct Host {
     security_rx: mpsc::Receiver<(crate::security::SecuritySettings, Result<(), String>)>,
     settings_tx: mpsc::Sender<Result<(), String>>,
     settings_rx: mpsc::Receiver<Result<(), String>>,
+    auth_poll_at: Option<std::time::Instant>,
+    auth_poll_in_flight: bool,
 }
 impl Host {
     pub fn new(app: Warden, preferences: bool) -> Self {
@@ -53,6 +55,8 @@ impl Host {
             security_rx,
             settings_tx,
             settings_rx,
+            auth_poll_at: None,
+            auth_poll_in_flight: false,
         };
         if preferences && let Some(path) = &host.settings_path {
             match Appearance::load(path) {
@@ -62,6 +66,9 @@ impl Host {
                         "Saved appearance could not be read. Defaults are active.".into()
                 }
             }
+        }
+        if preferences {
+            host.app.custom_titlebar = host.app.appearance.custom_titlebar;
         }
         if preferences && let Some(path) = &host.security_path {
             match crate::security::load(path) {
@@ -203,6 +210,8 @@ impl Host {
                 HostCommand::Disconnect => {
                     self.transfer_generation = self.transfer_generation.wrapping_add(1);
                     self.app.transfer_dialog = false;
+                    self.auth_poll_at = None;
+                    self.auth_poll_in_flight = false;
                     self.client.take();
                 }
                 HostCommand::Account { ticket, request } => {
@@ -274,6 +283,19 @@ impl HostView for Host {
     }
     fn poll_updates(&mut self) -> bool {
         let mut changed = self.poll_site_icons();
+        if self.app.authenticated
+            && !self.auth_poll_in_flight
+            && self
+                .auth_poll_at
+                .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(30))
+            && let Some(client) = &self.client
+            && client
+                .send(0, plicowarden_sdk::Request::PendingAuthRequests)
+                .is_ok()
+        {
+            self.auth_poll_at = Some(std::time::Instant::now());
+            self.auth_poll_in_flight = true;
+        }
         while let Some(event) = self
             .desktop
             .as_mut()
@@ -287,7 +309,24 @@ impl HostView for Host {
             changed = true;
         }
         while let Some(event) = self.client.as_ref().and_then(Client::try_recv) {
+            let auth_poll = event.ticket == 0
+                && matches!(
+                    &event.result,
+                    Ok(plicowarden_sdk::Reply::AuthRequests(_)) | Err(_)
+                );
+            if auth_poll {
+                self.auth_poll_in_flight = false;
+                let wake = Arc::clone(&self.wake);
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                    wake();
+                });
+                if event.result.is_err() {
+                    continue;
+                }
+            }
             let previous = self.app.ssh_approvals.len();
+            let previous_auth = self.app.auth_requests.len();
             let reload_accounts = matches!(
                 &event.result,
                 Ok(plicowarden_sdk::Reply::Login(_))
@@ -305,6 +344,11 @@ impl HostView for Host {
                 && let Some(desktop) = &self.desktop
             {
                 desktop.notify_ssh();
+            }
+            if self.app.auth_requests.len() > previous_auth
+                && let Some(desktop) = &self.desktop
+            {
+                desktop.notify_sign_in();
             }
             changed = true;
         }

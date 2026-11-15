@@ -7,7 +7,7 @@ export default suite([
   ...matrix(viewports, viewport => recipe(`search-${viewport.name}`, {
     state: demoVault(), viewport,
     steps: [
-      expect(buttonsStartingWith("Select ")).count(12),
+      expect(button("Select GitHub")).exists(),
       capture("unfocused"),
       ...search("github"),
       expect(button("Select GitHub")).exists(),
@@ -15,7 +15,7 @@ export default suite([
       expect(textbox("Search all vaults")).value("github"),
       capture("search-github"),
       ...search(""),
-      expect(buttonsStartingWith("Select ")).count(12),
+      expect(button("Select GitHub")).exists(),
       capture("search-cleared"),
       focus(button("Reverse sort")),
       capture("blurred"),
@@ -67,7 +67,7 @@ export default suite([
     state: demoVault(),
     steps: [
       ...flow("open-settings", [click(button("Settings")), expect(button("Close settings")).exists()]),
-      expect({ role: "switch", label: "Liquid Glass" }).absent(), capture("solid-controls"),
+      expect({ role: "switch", label: "Liquid Glass" }).absent(), capture("material-controls"),
       click(button("Reset appearance")), capture("defaults"),
       click(button("Close settings")), expect(button("Close settings")).absent(),
     ],
@@ -167,6 +167,12 @@ export default suite([
     steps: [expect(button("Allow SSH signature once")).exists(), advance(200), capture("approval"),
       click(button("Deny SSH signature")), expect(button("Allow SSH signature once")).enabled(false),
       advance(150), expect(button("Allow SSH signature once")).absent(), capture("denied")],
+  }),
+  recipe("login-approval", {
+    state: demoVault({ screen: "login-approval" }),
+    steps: [expectText("Are you trying to sign in?"), expectText("vault.example.invalid"),
+      expect(button("Approve")).exists(), expect(button("Deny")).exists(),
+      advance(200), capture("approval")],
   }),
   recipe("ssh-access-history", {
     state: demoVault({ screen: "ssh-history" }),

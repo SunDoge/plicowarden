@@ -15,12 +15,44 @@ fn kind_label(kind: &str) -> &str {
         other => other,
     }
 }
-fn mask_card_number(number: &str) -> String {
-    let digits: String = number.chars().filter(char::is_ascii_digit).collect();
-    if digits.len() <= 4 {
-        return "•".repeat(digits.len());
+fn mask_card_number(number: &str, brand: Option<&str>) -> String {
+    let suffix = number
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    let inferred_len = match brand {
+        Some("Amex" | "American Express") => 15,
+        Some("Diners Club") => 14,
+        _ => 16,
+    };
+    let len = if suffix.len() <= 4 {
+        inferred_len
+    } else {
+        suffix.len()
+    };
+    let visible = suffix.chars().rev().take(4).collect::<Vec<_>>();
+    let mut masked = vec!['•'; len];
+    for (index, digit) in visible.into_iter().enumerate() {
+        masked[len - 1 - index] = digit;
     }
-    format!("•••• •••• •••• {}", &digits[digits.len() - 4..])
+    let blocks: &[usize] = match len {
+        13 => &[4, 4, 5],
+        14 => &[4, 6, 4],
+        15 => &[4, 6, 5],
+        19 => &[4, 4, 4, 4, 3],
+        _ => &[4, 4, 4, 4],
+    };
+    let mut offset = 0;
+    blocks
+        .iter()
+        .filter_map(|size| {
+            let end = (offset + size).min(masked.len());
+            let chunk = (offset < end).then(|| masked[offset..end].iter().collect::<String>());
+            offset = end;
+            chunk
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 #[component]
 #[rustfmt::skip]
@@ -156,7 +188,7 @@ impl Warden {
                 text(ui, &site).width_percent(100.).grow(1.).font_size(14);
             };
             meta(ui, "person", "Vault", "My vault");
-            meta(ui, "key", "Passkey", if item.site.is_empty() { "Not configured" } else { "Available" });
+            meta(ui, "key", "Passkey", if item.has_passkey { "1 passkey" } else { "Not configured" });
             meta(ui, "shield", "Watchtower", "No issues found");
             column(ui).width_percent(100.).height(1.).background(Color::Literal(0xe4e3e9)).background_alpha(0.7)
                 .end();
@@ -203,29 +235,29 @@ impl Warden {
             {
                 self.action(&item.id, "restore");
             }
-            if tool(ui, "trash", "Delete permanently", self.busy) {
+            if toolbar_tool(ui, "trash", "Delete permanently", self.busy) {
                 self.ask(&item.id, "purge");
             }
             return;
         }
-        if tool(ui, "edit", "Edit item", self.busy || !editable) {
+        if toolbar_tool(ui, "edit", "Edit item", self.busy || !editable) {
             self.request(Request::Edit(item.id.clone()));
         }
-        if tool(ui, "star", if item.favorite { "Unfavorite" } else { "Favorite" },
+        if toolbar_tool(ui, "star", if item.favorite { "Unfavorite" } else { "Favorite" },
             self.busy || !editable) {
             self.action(&item.id, if item.favorite { "unfavorite" } else { "favorite" });
         }
-        if tool(ui, "copy", "Duplicate item", self.busy || !editable) {
+        if toolbar_tool(ui, "copy", "Duplicate item", self.busy || !editable) {
             self.action(&item.id, "clone");
         }
-        if tool(ui, "archive", if item.archived { "Unarchive" } else { "Archive item" },
+        if toolbar_tool(ui, "archive", if item.archived { "Unarchive" } else { "Archive item" },
             self.busy || !editable) {
             self.action(&item.id, if item.archived { "unarchive" } else { "archive" });
         }
-        if tool(ui, "folder", "Move to folder", self.busy || !editable) {
+        if toolbar_tool(ui, "folder", "Move to folder", self.busy || !editable) {
             self.open_move_dialog(vec![item.id.clone()]);
         }
-        if tool(ui, "trash", "Move to trash", self.busy || !editable) {
+        if toolbar_tool(ui, "trash", "Move to trash", self.busy || !editable) {
             self.ask(&item.id, "trash");
         }
     }
@@ -244,13 +276,42 @@ impl Warden {
                             .map_or(kind_label(&item.kind), String::as_str),
                     ).color(MUTED).width_percent(100.);
                 };
+                let loading_visible = self.detail_ticket.is_some()
+                    && self.selected != item.id
+                    && self.detail_loading_started_at.is_some_and(|started| {
+                        let reveal_at = started.saturating_add(std::time::Duration::from_millis(180));
+                        if ui.now() < reveal_at {
+                            ui.request_rebuild_at(reveal_at);
+                            false
+                        } else {
+                            true
+                        }
+                    });
+                if loading_visible {
+                    let progress = ui.loop_progress(
+                        "detail-switch-progress",
+                        std::time::Duration::from_millis(900),
+                        plico::Easing::Linear,
+                    );
+                    row(ui).shrink(0.).align(Align::Center).gap(8) + |ui| {
+                        plico::widgets::progress_ring_sized(
+                            ui,
+                            progress.max(0.08),
+                            20.,
+                            2.,
+                            Color::Accent,
+                            Color::Literal(0xe1dee8),
+                        );
+                        text(ui, "Opening…").font_size(12).color(MUTED);
+                    };
+                }
             };
         };
         // While details round-trip, keep the pane's shape: same-sized
         // placeholder cards pulse in place of the real fields (MyGO's
         // skeleton placeholder), so switching items never collapses and
         // re-expands the layout. Screen readers get one Loading status.
-        if details.is_none() && self.pending.is_some() {
+        if details.is_none() && self.detail_ticket.is_some() {
             let pulse = ui.loop_progress("detail-pulse", std::time::Duration::from_millis(1200),
                 plico::Easing::EaseInOut);
             let shade = 0.55 + 0.45 * pulse;
@@ -356,6 +417,37 @@ impl Warden {
                     }
                 };
             }
+            if !detail.passkeys.is_empty() {
+                surface(ui).padding_x(16).padding_y(14).gap(10) + |ui| {
+                    text!(
+                        ui,
+                        "Passkeys · {}",
+                        detail.passkeys.len()
+                    ).font_size(12).color(MUTED).width_percent(100.);
+                    for (index, passkey) in detail.passkeys.iter().enumerate() {
+                        ui.keyed(index as u64, |ui| {
+                            row(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
+                                glyph(ui, "key", 20., ICON);
+                                column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
+                                    text(
+                                        ui,
+                                        passkey.rp_name.as_deref().unwrap_or(&passkey.rp_id),
+                                    ).font_size(14).weight(650).width_percent(100.).ellipsis(true);
+                                    let account = passkey.user_display_name.as_deref()
+                                        .or(passkey.user_name.as_deref())
+                                        .unwrap_or("Account name unavailable");
+                                    text(ui, account).font_size(12).color(MUTED)
+                                        .width_percent(100.).ellipsis(true);
+                                };
+                                text(
+                                    ui,
+                                    relative_time(unix_seconds(), passkey.created_at),
+                                ).font_size(12).color(MUTED);
+                            };
+                        });
+                    }
+                };
+            }
             surface(ui).padding_x(16).padding_y(12).gap(10) + |ui| {
                 for (index, uri) in detail.uris.iter().enumerate() {
                     ui.keyed(index as u64, |ui| {
@@ -394,15 +486,25 @@ impl Warden {
                     }
                 }
                 if let Some(number) = detail.card_number.as_deref() {
-                    let masked = mask_card_number(number);
+                    let masked = mask_card_number(number, detail.card_brand.as_deref());
+                    let full_number_is_local = number.chars().filter(char::is_ascii_digit).count() > 4;
                     row(ui).width_percent(100.).align(Align::Center).gap(8.) + |ui| {
                         column(ui).width(0.).grow(1.).gap(2.) + |ui| {
                             text(ui, "Card number").font_size(12).color(MUTED);
-                            text(ui, if self.reveal_card_number { number } else { masked.as_str() }).
+                            text(ui, if self.reveal_card_number {
+                                self.shown_card_number.as_deref().map_or(masked.as_str(), |number| number.as_str())
+                            } else { masked.as_str() }).
                                 font_size(15);
                         };
                         if tool(ui, "copy", "Copy card number", self.busy) {
-                            self.copy_text(zeroize::Zeroizing::new(number.to_owned()));
+                            if full_number_is_local {
+                                self.copy_text(zeroize::Zeroizing::new(number.to_owned()));
+                            } else {
+                                self.request(Request::CopyField {
+                                    id: item.id.clone(),
+                                    field: "cardNumber".into(),
+                                });
+                            }
                         }
                         let (icon, label) = if self.reveal_card_number {
                             ("eye-off", "Hide card number")
@@ -410,8 +512,17 @@ impl Warden {
                             ("eye", "Show card number")
                         };
                         if tool(ui, icon, label, self.busy) {
-                            self.reveal_card_number = !self.reveal_card_number;
-                            ui.request_rebuild();
+                            if self.reveal_card_number {
+                                self.reveal_card_number = false;
+                                self.shown_card_number = None;
+                                ui.request_rebuild();
+                            } else if full_number_is_local {
+                                self.shown_card_number = Some(zeroize::Zeroizing::new(number.to_owned()));
+                                self.reveal_card_number = true;
+                                ui.request_rebuild();
+                            } else {
+                                self.request(Request::RevealCardNumber(item.id.clone()));
+                            }
                         }
                     };
                 }

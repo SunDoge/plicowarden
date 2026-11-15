@@ -1,7 +1,8 @@
+use plico_desktop::NativeApp;
 use plico_renderer::{
     FrameSource, Modifiers, Point, PointerButton, PointerEvent, PointerPhase, TextContext, UiEvent,
 };
-use plico_runtime::{NativeApp, Source, ZoomSource};
+use plico_runtime::{Source, ZoomSource};
 use plicowarden::{Warden, appearance::Appearance, display};
 
 fn source(factor: f64) -> ZoomSource {
@@ -13,19 +14,27 @@ fn source(factor: f64) -> ZoomSource {
     source
 }
 fn bounds(source: &ZoomSource, label: &str) -> [f32; 4] {
-    source
-        .semantic_snapshot()
-        .unwrap()
+    let snapshot = source.semantic_snapshot().unwrap();
+    snapshot
         .nodes
         .iter()
         .find(|n| n.label.as_deref() == Some(label))
-        .unwrap()
+        .unwrap_or_else(|| {
+            panic!(
+                "missing semantic node {label:?}; available labels: {:?}",
+                snapshot
+                    .nodes
+                    .iter()
+                    .filter_map(|node| node.label.as_deref())
+                    .collect::<Vec<_>>()
+            )
+        })
         .bounds
 }
 fn click(source: &mut ZoomSource, text: &mut TextContext, label: &str) {
     let b = bounds(source, label);
     for phase in [PointerPhase::Down, PointerPhase::Up] {
-        source.prepare_for_event(text);
+        source.prepare_for_event(text).unwrap();
         source.handle_event(UiEvent::Pointer(PointerEvent {
             phase,
             position: Point {
@@ -92,15 +101,19 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     assert_eq!(display::default_scale(true), 0.85);
     assert_eq!(display::default_scale(false), 1.);
     assert!(!display::window_options(true).decorations);
+    assert!(display::window_options(false).decorations);
     assert_eq!(
-        display::window_options(false).decorations,
+        display::window_options(true).linux_csd,
+        cfg!(target_os = "linux")
+    );
+    assert_eq!(
+        display::window_options(false).linux_csd,
         cfg!(target_os = "linux")
     );
     assert_eq!(display::window_options(true).corner_radius, 16);
-    assert_eq!(
-        display::window_options(false).corner_radius,
-        if cfg!(target_os = "linux") { 0 } else { 16 }
-    );
+    assert_eq!(display::window_options(false).corner_radius, 16);
+    assert!(display::window_options(true).has_shadow);
+    assert!(display::window_options(false).has_shadow);
     assert_eq!(display::window_options(true).initial_inner_size, (950, 720));
     assert_eq!(
         display::window_options(false).initial_inner_size,
@@ -112,7 +125,11 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
     );
     let legacy: Appearance = serde_json::from_str(r#"{"liquidGlass":false,"frost":0.42}"#).unwrap();
     assert_eq!(legacy.ui_scale, Appearance::default().ui_scale);
-    let invalid = Appearance { ui_scale: f64::NAN }.validated();
+    let invalid = Appearance {
+        ui_scale: f64::NAN,
+        ..Default::default()
+    }
+    .validated();
     assert_eq!(invalid.ui_scale, Appearance::default().ui_scale);
 }
 
@@ -162,6 +179,32 @@ fn custom_titlebar_controls_keep_point_size_and_clear_content_at_different_zoom_
 }
 
 #[test]
+fn title_toolbar_uses_compact_controls_without_shrinking_content_actions() {
+    let mut source = source(1.);
+    let mut text = TextContext::new();
+    source.build_frame(&mut text, 1224, 850);
+
+    for label in [
+        "Toggle sidebar",
+        "Search or run a command",
+        "Settings",
+        "Connect account",
+    ] {
+        let [_, top, _, bottom] = bounds(&source, label);
+        assert!(
+            (bottom - top - 28.).abs() < 1.,
+            "{label} should use the compact 28px title-toolbar control: {top}..{bottom}"
+        );
+    }
+
+    let [_, top, _, bottom] = bounds(&source, "Copy username");
+    assert!(
+        (bottom - top - 32.).abs() < 1.,
+        "content actions should retain their 32px size: {top}..{bottom}"
+    );
+}
+
+#[test]
 fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearance() {
     let mut source =
         Source::with_clock(NativeApp(Warden::default()), plico::VirtualClock::default());
@@ -172,8 +215,7 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
         .unwrap();
     let subtitle = |source: &Source<NativeApp<Warden>>| {
         source
-            .adapter
-            .placed
+            .placed_nodes()
             .iter()
             .find(|node| node.paint.text.as_deref() == Some("Demo vault"))
             .unwrap()
@@ -194,25 +236,23 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
     source
         .render_retained_frame(&mut scene, &mut text, (1440, 1000), 1.)
         .unwrap();
-    assert!(source.last_error.is_none());
     assert_ne!(
         subtitle(&source),
         before,
         "secondary text follows native contrast"
     );
-    fn fullscreen_shaders(nodes: &[plico::ViewNode]) -> usize {
-        nodes
+    fn fullscreen_shaders(scene: &plico_renderer::Scene) -> usize {
+        scene
+            .commands
             .iter()
-            .map(|node| {
-                usize::from(
-                    node.kind == plico::Kind::Shader
-                        && matches!(node.style.width, Some(width) if width >= 1000.),
-                ) + fullscreen_shaders(&node.children)
+            .filter(|command| {
+                matches!(command, plico_renderer::PaintCommand::Shader { effect, .. }
+                    if effect.uniform_words()[0] >= 1000.)
             })
-            .sum()
+            .count()
     }
     assert_eq!(
-        fullscreen_shaders(&source.engine.snapshot()),
+        fullscreen_shaders(&scene),
         0,
         "reduced transparency drops the fullscreen pastel wash; analytic widgets remain"
     );
@@ -221,11 +261,12 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
 
 #[test]
 fn official_client_surfaces_ignore_removed_legacy_preferences_and_render() {
-    fn shaders(nodes: &[plico::ViewNode]) -> usize {
-        nodes
+    fn shaders(scene: &plico_renderer::Scene) -> usize {
+        scene
+            .commands
             .iter()
-            .map(|node| usize::from(node.kind == plico::Kind::Shader) + shaders(&node.children))
-            .sum()
+            .filter(|command| matches!(command, plico_renderer::PaintCommand::Shader { .. }))
+            .count()
     }
     for screen in [
         "vault",
@@ -250,12 +291,7 @@ fn official_client_surfaces_ignore_removed_legacy_preferences_and_render() {
             .render_retained_frame(&mut scene, &mut text, (1440, 1000), 1.)
             .unwrap();
         assert!(
-            source.last_error.is_none(),
-            "{screen}: {:?}",
-            source.last_error
-        );
-        assert!(
-            shaders(&source.engine.snapshot()) > 0,
+            shaders(&scene) > 0,
             "{screen}: the shell declares the pastel wash"
         );
     }

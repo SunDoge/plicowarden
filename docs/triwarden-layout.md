@@ -128,18 +128,18 @@ above Email; expanding it opens the region / URL sheet directly below.
 
 ## Surfaces
 
-Panels and cards are solid white with a hairline border, an 18 px radius and
-one soft shadow; fields use the theme's control fill. The window wash is one full-window WGSL pass
+Vault content cards are solid white with a hairline border and an 18 px radius;
+fields use the theme's control fill. Navigation, the item-list pane, login card
+and modal chrome use Plico's Regular Liquid Glass with paired contact/ambient
+elevation. The window wash is one full-window WGSL pass
 (`assets/backdrop.wgsl`) approximating Triwarden's `WindowBackdrop`: pink,
 peach, mint and lavender radial glows over a light lavender base. It is
 visible in the 8 px window inset, behind the floating header, and across the
-login screen; it does not tint the text inside the panes.
-
-The earlier glass material pass was removed. It washed out text and fields on
-pale cards and cost backdrop-filter work on every pane. The layout no longer
-depends on a shader: with `Reduce Transparency` the wash is skipped and the
-solid surfaces remain unchanged. `Reduce Motion` snaps the sidebar width/gap
-and row transitions.
+login screen. Glass is deliberately not applied to every detail card: that
+earlier approach washed out text and paid backdrop work for content that did
+not benefit from it. With `Reduce Transparency`, Plico replaces each material
+with its opaque panel fallback and the wash is skipped. `Reduce Motion` snaps
+the sidebar width/gap, row transitions and material feedback.
 
 Native text fields follow MyGO's recipe: the theme control fill, a 1 px border
 in the theme border color, a 6 px radius, and the accent border while a

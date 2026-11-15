@@ -1,9 +1,9 @@
 export interface VaultFixture {
-  screen: "accounts" | "folders" | "transfer" | "bulk" | "ssh-approval" | "ssh-history" | "vault" | "settings" | "security" | "login" | "editor" | "generator" | "card" | "ssh-key" | "totp" | "fields" | "empty" | "notifications" | "many-folders";
+  screen: "accounts" | "folders" | "transfer" | "bulk" | "ssh-approval" | "login-approval" | "ssh-history" | "vault" | "settings" | "security" | "login" | "editor" | "generator" | "card" | "ssh-key" | "totp" | "fields" | "empty" | "notifications" | "many-folders";
   query: string;
   selected: string;
   filter: string;
-  /** Legacy preview input: all widgets now use solid surfaces. */
+  /** Legacy preview input; chrome material selection no longer varies by recipe. */
   opaque: boolean;
   custom_titlebar?: boolean;
 }

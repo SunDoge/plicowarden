@@ -5,11 +5,13 @@ use std::path::{Path, PathBuf};
 #[serde(default, rename_all = "camelCase")]
 pub struct Appearance {
     pub ui_scale: f64,
+    pub custom_titlebar: bool,
 }
 impl Default for Appearance {
     fn default() -> Self {
         Self {
             ui_scale: crate::display::default_scale(cfg!(target_os = "macos")),
+            custom_titlebar: !cfg!(target_os = "linux"),
         }
     }
 }

@@ -1,7 +1,5 @@
-use plico_runtime::{
-    NativeApp,
-    testing::{Command, Driver},
-};
+use plico_desktop::NativeApp;
+use plico_runtime::testing::{Command, Driver};
 use plicowarden::{PreviewConfig, Warden};
 
 fn click(ui: &mut Driver<NativeApp<Warden>>, label: &str) {
@@ -26,30 +24,27 @@ fn text(ui: &mut Driver<NativeApp<Warden>>, label: &str, value: &str) {
 #[test]
 fn csharp_demo_selection_search_reveal_filters_and_empty_recovery() {
     let mut ui = Driver::new(NativeApp(Warden::default()), 1440, 1000).unwrap();
-    assert_eq!(ui.source.view.0.selected, "github");
+    assert_eq!(ui.view().0.selected, "github");
     click(&mut ui, "Select Linear");
-    assert_eq!(ui.source.view.0.selected, "linear");
+    assert_eq!(ui.view().0.selected, "linear");
     text(&mut ui, "Search all vaults", "github");
-    assert_eq!(ui.source.view.0.visible().len(), 1);
-    assert_eq!(ui.source.view.0.selected, "github");
+    assert_eq!(ui.view().0.visible().len(), 1);
+    assert_eq!(ui.view().0.selected, "github");
     click(&mut ui, "Show password");
-    assert!(ui.source.view.0.reveal);
+    assert!(ui.view().0.reveal);
     click(&mut ui, "Hide password");
-    assert!(!ui.source.view.0.reveal);
-    ui.source.view.0.query = "nothing-matches".into();
-    ui.source.request_rebuild();
-    ui.execute(Command::Snapshot).unwrap();
-    assert!(ui.source.view.0.visible().is_empty());
-    ui.source.view.0.query.clear();
-    ui.source.request_rebuild();
-    ui.execute(Command::Snapshot).unwrap();
+    assert!(!ui.view().0.reveal);
+    ui.update_view(|view| view.0.query = "nothing-matches".into())
+        .unwrap();
+    assert!(ui.view().0.visible().is_empty());
+    ui.update_view(|view| view.0.query.clear()).unwrap();
     click(&mut ui, "Favorites");
-    assert_eq!(ui.source.view.0.visible().len(), 4);
+    assert_eq!(ui.view().0.visible().len(), 4);
     click(&mut ui, "All Items");
-    assert_eq!(ui.source.view.0.visible().len(), 12);
+    assert_eq!(ui.view().0.visible().len(), 12);
     click(&mut ui, "Reverse sort");
     assert_eq!(
-        ui.source.view.0.visible().first().unwrap().name,
+        ui.view().0.visible().first().unwrap().name,
         "Studio workstation"
     );
 }
@@ -58,17 +53,13 @@ fn csharp_demo_selection_search_reveal_filters_and_empty_recovery() {
 fn demo_totp_countdown_uses_the_injected_clock() {
     let mut ui = Driver::new(NativeApp(Warden::default()), 950, 720).unwrap();
     assert!(
-        ui.source
-            .adapter
-            .placed
+        ui.placed_nodes()
             .iter()
             .any(|node| node.paint.text.as_deref() == Some("30"))
     );
     ui.advance(std::time::Duration::from_secs(1)).unwrap();
     assert!(
-        ui.source
-            .adapter
-            .placed
+        ui.placed_nodes()
             .iter()
             .any(|node| node.paint.text.as_deref() == Some("29"))
     );
@@ -82,44 +73,84 @@ fn totp_progress_ring_is_a_valid_single_shader_surface() {
     }
     .app();
     let ui = Driver::new(NativeApp(app), 1000, 720).unwrap();
-    let diagnostics = ui.source.adapter.shader_diagnostics().collect::<Vec<_>>();
+    let diagnostics = ui.shader_diagnostics().collect::<Vec<_>>();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
+}
+
+#[test]
+fn short_sync_progress_float_stays_attached_to_the_footer() {
+    let mut app = PreviewConfig {
+        screen: "syncing".into(),
+        ..Default::default()
+    }
+    .app();
+    app.sync_progress_open = true;
+    let ui = Driver::new(NativeApp(app), 950, 720).unwrap();
+    let snapshot = ui.snapshot();
+    let nodes = snapshot.exposed_nodes();
+    let close = nodes
+        .iter()
+        .find(|node| node.label.as_deref() == Some("Close sync progress"))
+        .expect("sync progress close button");
+    let sync = nodes
+        .iter()
+        .find(|node| node.label.as_deref() == Some("Sync"))
+        .expect("footer sync button");
+    let gap = sync.bounds[1] - close.bounds[3];
+    assert!(
+        (0. ..100.).contains(&gap),
+        "short progress card drifted away from footer: close={:?}, sync={:?}",
+        close.bounds,
+        sync.bounds
+    );
 }
 #[test]
 fn csharp_settings_generator_and_cancelled_login_paths() {
     let mut ui = Driver::new(NativeApp(Warden::default()), 1440, 1000).unwrap();
     click(&mut ui, "Settings");
-    assert!(ui.source.view.0.settings_open);
-    ui.source.view.0.appearance.ui_scale = 1.25;
+    assert!(ui.view().0.settings_open);
+    ui.update_view(|view| view.0.appearance.ui_scale = 1.25)
+        .unwrap();
     click(&mut ui, "Reset appearance");
     assert_eq!(
-        ui.source.view.0.appearance.ui_scale,
+        ui.view().0.appearance.ui_scale,
         plicowarden::appearance::Appearance::default().ui_scale
     );
     click(&mut ui, "Close settings");
     click(&mut ui, "Generator");
     click(&mut ui, "Generate password");
-    assert_eq!(ui.source.view.0.generated.len(), 24);
-    assert_eq!(ui.source.view.0.history.len(), 2);
+    assert_eq!(ui.view().0.generated.len(), 24);
+    assert_eq!(ui.view().0.history.len(), 2);
     click(&mut ui, "Connect account");
-    assert!(
-        ui.source
-            .view
-            .0
-            .router
-            .show(plicowarden::model::Page::Login)
-    );
+    assert!(ui.view().0.router.show(plicowarden::model::Page::Login));
     click(&mut ui, "Browse demo vault");
-    assert!(
-        ui.source
-            .view
-            .0
-            .router
-            .show(plicowarden::model::Page::Vault)
-    );
-    assert!(ui.source.view.0.generated.is_empty());
-    assert_eq!(ui.source.view.0.visible().len(), 12);
+    assert!(ui.view().0.router.show(plicowarden::model::Page::Vault));
+    assert!(ui.view().0.generated.is_empty());
+    assert_eq!(ui.view().0.visible().len(), 12);
 }
+
+#[test]
+fn settings_sheet_keeps_the_same_bounds_across_tabs() {
+    let mut ui = Driver::new(NativeApp(Warden::default()), 1000, 720).unwrap();
+    click(&mut ui, "Settings");
+    let dialog_bounds = |ui: &Driver<NativeApp<Warden>>| {
+        ui.snapshot()
+            .exposed_nodes()
+            .iter()
+            .find(|node| {
+                node.role == plico_renderer::SemanticRole::Dialog
+                    && node.label.as_deref() == Some("Settings")
+            })
+            .expect("settings dialog")
+            .bounds
+    };
+    let expected = dialog_bounds(&ui);
+    for tab in ["Security", "SSH agent", "Account", "Appearance"] {
+        click(&mut ui, tab);
+        assert_eq!(dialog_bounds(&ui), expected, "settings moved on {tab}");
+    }
+}
+
 #[test]
 fn preview_forms_and_compact_layout_have_valid_native_trees() {
     for (width, height) in [(1440, 1000), (1000, 720), (820, 640)] {
@@ -138,7 +169,7 @@ fn preview_forms_and_compact_layout_have_valid_native_trees() {
             .app();
             let ui = Driver::new(NativeApp(app), width, height).unwrap();
             assert!(!ui.snapshot().exposed_nodes().is_empty());
-            for node in &ui.source.adapter.placed {
+            for node in ui.placed_nodes() {
                 assert!(node.rect.iter().all(|v| v.is_finite()));
             }
         }
@@ -221,9 +252,7 @@ fn login_uses_a_branded_split_or_centered_card_and_vault_columns_keep_their_widt
         selected.bounds
     );
     let heading = ui
-        .source
-        .adapter
-        .placed
+        .placed_nodes()
         .iter()
         .find(|n| n.paint.text.as_deref() == Some("GitHub") && n.paint.font_size >= 28.)
         .unwrap();
@@ -311,14 +340,14 @@ fn generator_mode_controls_produce_values_through_real_buttons() {
     click(&mut ui, "Generator");
     click(&mut ui, "Passphrase");
     click(&mut ui, "Generate passphrase");
-    assert_eq!(ui.source.view.0.generated.split('-').count(), 6);
+    assert_eq!(ui.view().0.generated.split('-').count(), 6);
     click(&mut ui, "Username");
-    assert_eq!(ui.source.view.0.generated.split('-').count(), 3);
+    assert_eq!(ui.view().0.generated.split('-').count(), 3);
     click(&mut ui, "Generate username");
-    assert_eq!(ui.source.view.0.generated.split('-').count(), 3);
+    assert_eq!(ui.view().0.generated.split('-').count(), 3);
     click(&mut ui, "Copy generated value");
     assert!(
-        matches!(ui.source.view.0.commands.last(), Some(plicowarden::model::HostCommand::Account { request, .. }) if matches!(request.as_ref(), plicowarden_sdk::Request::CopyText(_)))
+        matches!(ui.view().0.commands.last(), Some(plicowarden::model::HostCommand::Account { request, .. }) if matches!(request.as_ref(), plicowarden_sdk::Request::CopyText(_)))
     );
 }
 
@@ -330,30 +359,93 @@ fn ssh_approval_requires_an_explicit_decision_and_lock_discards_it() {
     }
     .app();
     let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
-    assert_eq!(ui.source.view.0.ssh_approvals.len(), 1);
-    assert!(ui.source.view.0.commands.is_empty());
+    assert_eq!(ui.view().0.ssh_approvals.len(), 1);
+    assert!(ui.view().0.commands.is_empty());
     click(&mut ui, "Allow SSH signature once");
-    assert!(ui.source.view.0.ssh_approvals.is_empty());
+    assert!(ui.view().0.ssh_approvals.is_empty());
     assert!(matches!(
-        ui.source.view.0.commands.last(),
+        ui.view().0.commands.last(),
         Some(plicowarden::model::HostCommand::SshDecision { id: 1, allow: true })
     ));
-    ui.source.view.0.lock();
-    assert!(ui.source.view.0.ssh_socket.is_none());
-    assert!(!ui.source.view.0.ssh_modal.is_open());
+    ui.update_view(|view| view.0.lock()).unwrap();
+    assert!(ui.view().0.ssh_socket.is_none());
+    assert!(!ui.view().0.ssh_modal.is_open());
     // Stale public approval after lock cannot reopen the signing dialog.
-    ui.source.view.0.apply(plicowarden_sdk::Event {
-        ticket: 0,
-        result: Ok(plicowarden_sdk::Reply::SshApproval(
-            plicowarden_sdk::ssh_agent::Approval {
-                id: 2,
-                name: "stale".into(),
-                fingerprint: "synthetic".into(),
-                process_id: None,
-            },
-        )),
-    });
-    assert!(ui.source.view.0.ssh_approvals.is_empty());
+    ui.update_view(|view| {
+        view.0.apply(plicowarden_sdk::Event {
+            ticket: 0,
+            result: Ok(plicowarden_sdk::Reply::SshApproval(
+                plicowarden_sdk::ssh_agent::Approval {
+                    id: 2,
+                    name: "stale".into(),
+                    fingerprint: "synthetic".into(),
+                    process_id: None,
+                },
+            )),
+        })
+    })
+    .unwrap();
+    assert!(ui.view().0.ssh_approvals.is_empty());
+}
+
+#[test]
+fn device_login_approval_shows_identity_and_waits_for_the_worker_reply() {
+    let app = PreviewConfig {
+        screen: "login-approval".into(),
+        ..Default::default()
+    }
+    .app();
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    assert_eq!(ui.view().0.auth_requests.len(), 1);
+    assert!(ui.view().0.auth_request_modal.is_open());
+    assert!(
+        ui.placed_nodes()
+            .iter()
+            .any(|node| node.paint.text.as_deref() == Some("203.0.113.42"))
+    );
+    assert!(ui.placed_nodes().iter().any(|node| {
+        node.paint.text.as_deref() == Some("paperweight-rinsing-pavilion-uncooked-unicycle")
+    }));
+    click(&mut ui, "Approve");
+    assert_eq!(ui.view().0.auth_requests.len(), 1);
+    assert!(ui.view().0.busy);
+    assert!(matches!(
+        ui.view().0.commands.last(),
+        Some(plicowarden::model::HostCommand::Account { request, .. })
+            if matches!(request.as_ref(), plicowarden_sdk::Request::AnswerAuthRequest { approve: true, .. })
+    ));
+    let ticket = ui.view().0.pending.unwrap();
+    ui.update_view(|view| {
+        view.0.apply(plicowarden_sdk::Event {
+            ticket,
+            result: Ok(plicowarden_sdk::Reply::AuthRequestAnswered {
+                id: "018f767d-6d67-7b5a-a281-9a54fd2f15b7".into(),
+                approved: true,
+            }),
+        })
+    })
+    .unwrap();
+    assert!(ui.view().0.auth_requests.is_empty());
+    assert!(!ui.view().0.auth_request_modal.is_open());
+    assert_eq!(ui.view().0.notice, "Sign-in approved.");
+    ui.update_view(|view| {
+        view.0.lock();
+        view.0.apply(plicowarden_sdk::Event {
+            ticket: 0,
+            result: Ok(plicowarden_sdk::Reply::AuthRequests(vec![
+                plicowarden_sdk::service::AuthRequest {
+                    id: "018f767d-6d67-7b5a-a281-9a54fd2f15b7".into(),
+                    device_type: "stale".into(),
+                    ip_address: "203.0.113.42".into(),
+                    country: None,
+                    created: None,
+                    fingerprint: "stale".into(),
+                },
+            ])),
+        });
+    })
+    .unwrap();
+    assert!(ui.view().0.auth_requests.is_empty());
 }
 
 #[test]
@@ -370,26 +462,27 @@ fn ssh_access_history_records_outcomes_filters_and_clears() {
         (2, "Key Two", Outcome::Denied),
         (3, "Key Three", Outcome::TimedOut),
     ] {
-        ui.source.view.0.apply(plicowarden_sdk::Event {
-            ticket: 0,
-            result: Ok(plicowarden_sdk::Reply::SshAccess(AccessRecord {
-                id,
-                name: name.into(),
-                fingerprint: format!("SHA256:synthetic-{id}"),
-                process_id: Some(4000 + id as u32),
-                outcome,
-                at: 1,
-            })),
-        });
+        ui.update_view(|view| {
+            view.0.apply(plicowarden_sdk::Event {
+                ticket: 0,
+                result: Ok(plicowarden_sdk::Reply::SshAccess(AccessRecord {
+                    id,
+                    name: name.into(),
+                    fingerprint: format!("SHA256:synthetic-{id}"),
+                    process_id: Some(4000 + id as u32),
+                    outcome,
+                    at: 1,
+                })),
+            })
+        })
+        .unwrap();
     }
-    assert_eq!(ui.source.view.0.ssh_history.len(), 3);
+    assert_eq!(ui.view().0.ssh_history.len(), 3);
     click(&mut ui, "SSH agent");
     click(&mut ui, "History");
-    assert_eq!(ui.source.view.0.ssh_view, plicowarden::model::SSH_HISTORY);
+    assert_eq!(ui.view().0.ssh_view, plicowarden::model::SSH_HISTORY);
     let shown = |ui: &Driver<NativeApp<Warden>>, value: &str| {
-        ui.source
-            .adapter
-            .placed
+        ui.placed_nodes()
             .iter()
             .any(|node| node.paint.text.as_deref() == Some(value))
     };
@@ -404,9 +497,9 @@ fn ssh_access_history_records_outcomes_filters_and_clears() {
     assert!(shown(&ui, "Key Two"));
     assert!(shown(&ui, "Key Three"));
     click(&mut ui, "Clear history");
-    assert!(ui.source.view.0.ssh_history.is_empty());
+    assert!(ui.view().0.ssh_history.is_empty());
     assert!(matches!(
-        ui.source.view.0.commands.last(),
+        ui.view().0.commands.last(),
         Some(plicowarden::model::HostCommand::Account { request, .. })
             if matches!(request.as_ref(), plicowarden_sdk::Request::ClearSshHistory)
     ));
@@ -421,14 +514,14 @@ fn interface_scale_setting_changes_the_host_controller_and_resets() {
         value: 0.85,
     })
     .unwrap();
-    assert!((ui.source.view.0.zoom.factor() - 0.85).abs() < 0.001);
+    assert!((ui.view().0.zoom.factor() - 0.85).abs() < 0.001);
     click(&mut ui, "Save appearance");
     assert!(
-        matches!(ui.source.view.0.commands.last(), Some(plicowarden::model::HostCommand::SaveAppearance(value)) if (value.ui_scale-0.85).abs()<0.001)
+        matches!(ui.view().0.commands.last(), Some(plicowarden::model::HostCommand::SaveAppearance(value)) if (value.ui_scale-0.85).abs()<0.001)
     );
     click(&mut ui, "Reset appearance");
     assert_eq!(
-        ui.source.view.0.zoom.factor(),
+        ui.view().0.zoom.factor(),
         plicowarden::appearance::Appearance::default().ui_scale
     );
 }
@@ -447,25 +540,46 @@ fn login_steps_preserve_email_clear_password_and_keep_server_choices() {
         640,
     )
     .unwrap();
+    let has_text = |ui: &Driver<NativeApp<Warden>>, expected: &str| {
+        ui.placed_nodes()
+            .iter()
+            .any(|node| node.paint.text.as_deref() == Some(expected))
+    };
+    assert!(has_text(&ui, "bitwarden.com"));
+    assert!(has_text(&ui, "Bitwarden · United States"));
     text(&mut ui, "Email address", "bad-address");
     click(&mut ui, "Continue");
-    assert!(!ui.source.view.0.login_password_step);
-    assert!(!ui.source.view.0.error.is_empty());
-    ui.source.view.0.email = "person@example.invalid".into();
-    ui.source.request_rebuild();
-    ui.execute(Command::Snapshot).unwrap();
+    assert!(!ui.view().0.login_password_step);
+    assert!(!ui.view().0.error.is_empty());
+    ui.update_view(|view| view.0.email = "person@example.invalid".into())
+        .unwrap();
     click(&mut ui, "Continue");
+    assert!(has_text(&ui, "bitwarden.com"));
     text(&mut ui, "Master password", "synthetic-secret");
+    click(&mut ui, "Show master password");
+    assert!(ui.view().0.login_show_password);
+    assert_eq!(
+        ui.view().0.password.with_value(str::to_owned),
+        "synthetic-secret"
+    );
+    click(&mut ui, "Hide master password");
+    assert!(!ui.view().0.login_show_password);
     click(&mut ui, "Back");
-    assert!(ui.source.view.0.password.is_empty());
-    assert_eq!(ui.source.view.0.email, "person@example.invalid");
-    click(&mut ui, "bitwarden.com");
+    assert!(ui.view().0.password.is_empty());
+    assert_eq!(ui.view().0.email, "person@example.invalid");
+    click(&mut ui, "Change server");
     click(&mut ui, "Self-hosted");
     text(&mut ui, "Server URL", "https://vault.example.invalid");
     click(&mut ui, "Done");
     click(&mut ui, "Continue");
-    assert_eq!(ui.source.view.0.region, "self-hosted");
-    assert_eq!(ui.source.view.0.server, "https://vault.example.invalid");
+    assert_eq!(ui.view().0.region, "self-hosted");
+    assert_eq!(ui.view().0.server, "https://vault.example.invalid");
+    assert!(has_text(&ui, "vault.example.invalid"));
+    assert!(has_text(&ui, "Self-hosted server"));
+    text(&mut ui, "Master password", "synthetic-secret");
+    click(&mut ui, "Sign in");
+    assert!(has_text(&ui, "vault.example.invalid"));
+    assert!(has_text(&ui, "Target · vault.example.invalid"));
 }
 
 #[test]
@@ -511,7 +625,7 @@ fn supported_window_sizes_show_navigation_items_and_details_by_default() {
 fn folders_remain_visible_in_demo_and_loaded_folders_filter_items() {
     let mut ui = Driver::new(NativeApp(Warden::default()), 1440, 1000).unwrap();
     click(&mut ui, "No folder");
-    assert_eq!(ui.source.view.0.visible().len(), 12);
+    assert_eq!(ui.view().0.visible().len(), 12);
     let mut app = PreviewConfig {
         screen: "folders".into(),
         ..Default::default()
@@ -539,8 +653,8 @@ fn folders_remain_visible_in_demo_and_loaded_folders_filter_items() {
     app.folders_modal.close();
     let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
     click(&mut ui, &folder.name);
-    assert_eq!(ui.source.view.0.filter, format!("path:{}", folder.name));
-    assert_eq!(ui.source.view.0.visible().len(), expected);
+    assert_eq!(ui.view().0.filter, format!("path:{}", folder.name));
+    assert_eq!(ui.view().0.visible().len(), expected);
     click(&mut ui, "Manage folders");
     assert!(
         ui.snapshot()
@@ -593,9 +707,7 @@ fn desktop_sidebar_animates_layout_width_and_retains_its_exit() {
             .bounds[0]
     }
     fn detail_width(ui: &Driver<NativeApp<Warden>>) -> f32 {
-        ui.source
-            .adapter
-            .placed
+        ui.placed_nodes()
             .iter()
             .filter(|node| node.scroll.scrollable[1])
             .max_by(|a, b| a.rect[0].total_cmp(&b.rect[0]))
@@ -613,7 +725,7 @@ fn desktop_sidebar_animates_layout_width_and_retains_its_exit() {
         "animated layout width must not jump"
     );
     assert!(
-        ui.source.engine.wake_deadline().is_some(),
+        ui.animation_deadline().is_some(),
         "application-authored presentation values need a rebuild deadline"
     );
     assert!(
@@ -663,17 +775,13 @@ fn desktop_sidebar_animates_layout_width_and_retains_its_exit() {
 
 #[test]
 fn overflowing_sidebar_accepts_wheel_scroll() {
-    use plico_renderer::{
-        FrameSource, GesturePhase, Modifiers, Point, UiEvent, WheelDeltaMode, WheelEvent,
-    };
+    use plico_renderer::{GesturePhase, Modifiers, Point, UiEvent, WheelDeltaMode, WheelEvent};
 
     let mut app = Warden::default();
     app.folders.clear();
     let mut ui = Driver::new(NativeApp(app), 1000, 500).unwrap();
     let sidebar = ui
-        .source
-        .adapter
-        .placed
+        .placed_nodes()
         .iter()
         .find(|node| {
             node.scroll.scrollable[1]
@@ -688,28 +796,59 @@ fn overflowing_sidebar_accepts_wheel_scroll() {
         y: (sidebar.rect[1] + sidebar.rect[3]) as f64 * 0.5,
     };
     assert!(
-        ui.source
-            .handle_event(UiEvent::Wheel(WheelEvent {
-                position,
-                delta_x: 0.,
-                delta_y: 96.,
-                delta_mode: WheelDeltaMode::Pixel,
-                phase: GesturePhase::Changed,
-                modifiers: Modifiers::empty(),
-            }))
-            .handled
+        ui.dispatch_event(UiEvent::Wheel(WheelEvent {
+            position,
+            delta_x: 0.,
+            delta_y: 96.,
+            delta_mode: WheelDeltaMode::Pixel,
+            phase: GesturePhase::Changed,
+            modifiers: Modifiers::empty(),
+        }))
+        .unwrap()
+        .handled
     );
-    ui.execute(Command::Snapshot).unwrap();
     let offset = ui
-        .source
-        .adapter
-        .placed
+        .placed_nodes()
         .iter()
         .find(|node| node.node_id == sidebar.node_id)
         .unwrap()
         .scroll
         .offset[1];
     assert!(offset > 0., "wheel should move the sidebar, got {offset}");
+}
+
+#[test]
+fn large_vault_mounts_only_visible_item_rows() {
+    use plico_renderer::{GesturePhase, Modifiers, Point, UiEvent, WheelDeltaMode, WheelEvent};
+
+    let mut app = Warden::default();
+    let sample = app.items.clone();
+    for batch in 0..8 {
+        app.items.extend(sample.iter().cloned().map(|mut item| {
+            item.id = format!("{}-{batch}", item.id);
+            item.name = format!("{} {batch}", item.name);
+            item
+        }));
+    }
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    assert!(ui.view().0.visible().len() > 100);
+    assert!(
+        ui.placed_nodes().len() < 500,
+        "the retained tree must stay bounded by the viewport"
+    );
+    assert!(
+        ui.dispatch_event(UiEvent::Wheel(WheelEvent {
+            position: Point { x: 400., y: 400. },
+            delta_x: 0.,
+            delta_y: -600.,
+            delta_mode: WheelDeltaMode::Pixel,
+            phase: GesturePhase::Changed,
+            modifiers: Modifiers::empty(),
+        }))
+        .unwrap()
+        .handled
+    );
+    assert!(ui.placed_nodes().len() < 500);
 }
 
 #[test]
@@ -721,17 +860,18 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
     }
     .app();
     let mut ui = Driver::new(NativeApp(app), 1000, 720).unwrap();
-    ui.source.view.0.email = "recipe@example.invalid".into();
-    ui.source.view.0.login_password_step = true;
-    ui.source
-        .view
-        .0
-        .password
-        .edit(plico::InputEdit::Insert(zeroize::Zeroizing::new(
-            "synthetic-only".into(),
-        )));
-    ui.source.view.0.login();
-    let ticket = ui.source.view.0.pending.unwrap();
+    ui.update_view(|view| {
+        view.0.email = "recipe@example.invalid".into();
+        view.0.login_password_step = true;
+        view.0
+            .password
+            .edit(plico::InputEdit::Insert(zeroize::Zeroizing::new(
+                "synthetic-only".into(),
+            )));
+        view.0.login();
+    })
+    .unwrap();
+    let ticket = ui.view().0.pending.unwrap();
     ui.execute(Command::Snapshot).unwrap();
     assert!(
         ui.snapshot()
@@ -744,42 +884,46 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
         LoginStage::Syncing,
         LoginStage::Decrypting,
     ] {
-        ui.source.view.0.apply(Event {
-            ticket,
-            result: Ok(Reply::LoginProgress(stage)),
-        });
-        assert!(ui.source.view.0.busy);
-        assert_eq!(ui.source.view.0.pending, Some(ticket));
-        assert_eq!(ui.source.view.0.login_stage, Some(stage));
+        ui.update_view(|view| {
+            view.0.apply(Event {
+                ticket,
+                result: Ok(Reply::LoginProgress(stage)),
+            })
+        })
+        .unwrap();
+        assert!(ui.view().0.busy);
+        assert_eq!(ui.view().0.pending, Some(ticket));
+        assert_eq!(ui.view().0.login_stage, Some(stage));
         // Production host events request a declaration rebuild. This test
         // mutates the app directly, so make that boundary explicit while the
         // spinner itself advances on retained presentation frames.
-        ui.source.request_rebuild();
-        ui.execute(Command::Snapshot).unwrap();
         assert!(
-            ui.source
-                .adapter
-                .placed
+            ui.placed_nodes()
                 .iter()
                 .any(|n| n.paint.text.as_deref() == Some(stage.label()))
         );
     }
-    ui.source.view.0.apply(Event {
-        ticket: ticket + 1,
-        result: Ok(Reply::LoginProgress(LoginStage::Authenticating)),
-    });
-    assert_eq!(ui.source.view.0.login_stage, Some(LoginStage::Decrypting));
-    ui.source.view.0.apply(Event {
-        ticket,
-        result: Err("Synthetic failure".into()),
-    });
-    assert!(!ui.source.view.0.busy);
-    assert!(ui.source.view.0.login_stage.is_none());
-    assert!(ui.source.view.0.error.contains("Unlocking vault"));
+    ui.update_view(|view| {
+        view.0.apply(Event {
+            ticket: ticket + 1,
+            result: Ok(Reply::LoginProgress(LoginStage::Authenticating)),
+        })
+    })
+    .unwrap();
+    assert_eq!(ui.view().0.login_stage, Some(LoginStage::Decrypting));
+    ui.update_view(|view| {
+        view.0.apply(Event {
+            ticket,
+            result: Err("Synthetic failure".into()),
+        })
+    })
+    .unwrap();
+    assert!(!ui.view().0.busy);
+    assert!(ui.view().0.login_stage.is_none());
+    assert!(ui.view().0.error.contains("Unlocking vault"));
     use plicowarden::login_progress::StepState;
     assert_eq!(
-        ui.source
-            .view
+        ui.view()
             .0
             .login_progress
             .steps
@@ -789,21 +933,19 @@ fn login_progress_keeps_request_pending_rejects_stale_updates_and_stops_on_failu
         [StepState::Complete, StepState::Complete, StepState::Failed]
     );
 
-    ui.source.view.0.apply(Event {
-        ticket: 0,
-        result: Ok(Reply::Locked),
-    });
-    assert_eq!(
-        ui.source.view.0.login_progress.steps[2].state,
-        StepState::Failed
-    );
+    ui.update_view(|view| {
+        view.0.apply(Event {
+            ticket: 0,
+            result: Ok(Reply::Locked),
+        })
+    })
+    .unwrap();
+    assert_eq!(ui.view().0.login_progress.steps[2].state, StepState::Failed);
 
     assert!(
-        ui.source.view.0.error.contains("Synthetic failure"),
+        ui.view().0.error.contains("Synthetic failure"),
         "the cleanup lock must preserve the login error"
     );
-    ui.source.request_rebuild();
-    ui.execute(Command::Snapshot).unwrap();
     assert!(
         !ui.snapshot()
             .exposed_nodes()
@@ -831,6 +973,7 @@ fn cached_detail(id: &str, name: &str) -> plicowarden_sdk::service::ItemDetails 
         favorite: false,
         has_password: false,
         has_totp: false,
+        passkeys: Vec::new(),
         has_card_number: false,
         has_card_code: false,
         editable: true,
@@ -865,6 +1008,59 @@ fn cached_detail(id: &str, name: &str) -> plicowarden_sdk::service::ItemDetails 
 }
 
 #[test]
+fn passkey_presence_and_public_metadata_are_visible_in_item_details() {
+    use plicowarden_sdk::service::PasskeyDetails;
+
+    let mut app = Warden::default();
+    app.authenticated = true;
+    let item = app
+        .items
+        .iter_mut()
+        .find(|item| item.id == "github")
+        .unwrap();
+    item.has_passkey = true;
+    let item_id = item.id.clone();
+    let item_name = item.name.clone();
+    let mut detail = cached_detail(&item_id, &item_name);
+    detail.passkeys = vec![
+        PasskeyDetails {
+            rp_id: "github.com".into(),
+            rp_name: Some("GitHub".into()),
+            user_name: Some("octocat".into()),
+            user_display_name: Some("The Octocat".into()),
+            created_at: 1_700_000_000,
+        },
+        PasskeyDetails {
+            rp_id: "github.com".into(),
+            rp_name: None,
+            user_name: Some("work-account".into()),
+            user_display_name: None,
+            created_at: 1_710_000_000,
+        },
+    ];
+    app.selected = item_id;
+    app.details = Some(detail);
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+    let texts = ui
+        .placed_nodes()
+        .iter()
+        .filter_map(|node| node.paint.text.as_deref())
+        .collect::<Vec<_>>();
+    for expected in [
+        "Passkeys · 2",
+        "GitHub",
+        "The Octocat",
+        "github.com",
+        "work-account",
+    ] {
+        assert!(texts.contains(&expected), "missing passkey text {expected}");
+    }
+    click(&mut ui, "Passkeys");
+    assert_eq!(ui.view().0.visible().len(), 1);
+    assert_eq!(ui.view().0.visible()[0].id, "github");
+}
+
+#[test]
 fn cached_real_item_switch_does_not_flash_global_busy_or_loading_cards() {
     let mut app = Warden::default();
     app.authenticated = true;
@@ -878,18 +1074,97 @@ fn cached_real_item_switch_does_not_flash_global_busy_or_loading_cards() {
     app.details = app.detail_cache.get(&first.id).cloned();
     let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
     click(&mut ui, &format!("Select {}", second.name));
-    assert!(!ui.source.view.0.busy);
-    assert_eq!(ui.source.view.0.details.as_ref().unwrap().id, second.id);
-    assert!(ui.source.view.0.pending.is_some());
-    assert!(!ui.source.adapter.placed.iter().any(|n| {
+    assert!(!ui.view().0.busy);
+    assert_eq!(ui.view().0.details.as_ref().unwrap().id, second.id);
+    assert!(ui.view().0.detail_ticket.is_some());
+    assert!(!ui.placed_nodes().iter().any(|n| {
         n.paint
             .text
             .as_deref()
             .is_some_and(|text| text.starts_with("Loading"))
     }));
-    // Switching again is possible while the previous read is still in flight.
+    ui.advance(std::time::Duration::from_millis(200)).unwrap();
+    let ticket = ui.view().0.detail_ticket.unwrap();
+    let refreshed = cached_detail(&second.id, &second.name);
+    ui.update_view(|view| {
+        view.0.apply(plicowarden_sdk::Event {
+            ticket,
+            result: Ok(plicowarden_sdk::Reply::Details(Box::new(refreshed))),
+        })
+    })
+    .unwrap();
+    assert!(
+        !ui.has_animation(),
+        "refreshing the already-presented item must not replay its enter motion"
+    );
+    // Switching again after the refresh keeps using the cached fast path.
     click(&mut ui, &format!("Select {}", first.name));
-    assert_eq!(ui.source.view.0.selected, first.id);
+    assert_eq!(ui.view().0.selected, first.id);
+}
+
+#[test]
+fn uncached_item_switch_keeps_the_presented_detail_until_the_reply_is_ready() {
+    let mut app = Warden::default();
+    app.authenticated = true;
+    let first = app.items[0].clone();
+    let second = app.items[1].clone();
+    app.selected = first.id.clone();
+    app.details = Some(cached_detail(&first.id, &first.name));
+    let mut ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
+
+    click(&mut ui, &format!("Select {}", second.name));
+
+    assert_eq!(ui.view().0.selected, second.id);
+    assert_eq!(ui.view().0.details.as_ref().unwrap().id, first.id);
+    assert!(ui.view().0.detail_ticket.is_some());
+    assert!(
+        ui.placed_nodes()
+            .iter()
+            .any(|node| { node.paint.text.as_deref() == Some(first.name.as_str()) })
+    );
+    assert!(
+        !ui.placed_nodes()
+            .iter()
+            .any(|node| { node.paint.text.as_deref() == Some("Opening…") }),
+        "a fast local detail read must not flash a one-frame loading label"
+    );
+    assert!(!ui.placed_nodes().iter().any(|node| {
+        node.paint
+            .text
+            .as_deref()
+            .is_some_and(|text| text.starts_with("Loading"))
+    }));
+
+    ui.advance(std::time::Duration::from_millis(181)).unwrap();
+    assert!(
+        ui.placed_nodes()
+            .iter()
+            .any(|node| { node.paint.text.as_deref() == Some("Opening…") }),
+        "a genuinely slow detail read still needs feedback"
+    );
+
+    let ticket = ui.view().0.detail_ticket.unwrap();
+    let detail = cached_detail(&second.id, &second.name);
+    ui.update_view(|view| {
+        view.0.apply(plicowarden_sdk::Event {
+            ticket,
+            result: Ok(plicowarden_sdk::Reply::Details(Box::new(detail))),
+        })
+    })
+    .unwrap();
+    assert_eq!(ui.view().0.details.as_ref().unwrap().id, second.id);
+    assert!(
+        ui.has_animation(),
+        "the keyed replacement must request its short enter animation"
+    );
+    ui.advance(std::time::Duration::from_millis(200)).unwrap();
+    assert!(
+        ui.placed_nodes()
+            .iter()
+            .filter(|node| { node.paint.text.as_deref() == Some(second.name.as_str()) })
+            .all(|node| node.paint.opacity >= 0.999)
+    );
+    assert!(!ui.has_animation());
 }
 
 #[test]
@@ -904,9 +1179,7 @@ fn downloaded_site_icon_is_declared_as_an_image_in_list_and_details() {
     app.selected = app.items[0].id.clone();
     let ui = Driver::new(NativeApp(app), 1440, 1000).unwrap();
     assert!(
-        ui.source
-            .adapter
-            .placed
+        ui.placed_nodes()
             .iter()
             .filter(|n| n.paint.image.is_some())
             .count()
@@ -937,17 +1210,12 @@ fn account_picker_distinguishes_identical_emails_on_different_servers_and_shows_
         &mut ui,
         "Unlock account same@example.invalid on https://two.example.invalid",
     );
-    assert_eq!(ui.source.view.0.server, "https://two.example.invalid");
+    assert_eq!(ui.view().0.server, "https://two.example.invalid");
     assert!(
-        ui.source
-            .view
-            .0
-            .router
-            .show(plicowarden::model::Page::Login)
-            && ui.source.view.0.login_password_step
+        ui.view().0.router.show(plicowarden::model::Page::Login) && ui.view().0.login_password_step
     );
-    assert!(ui.source.view.0.password.is_empty());
-    assert!(ui.source.view.0.has_cached_account());
+    assert!(ui.view().0.password.is_empty());
+    assert!(ui.view().0.has_cached_account());
     ui.advance(std::time::Duration::from_millis(250)).unwrap();
     assert!(
         ui.snapshot()

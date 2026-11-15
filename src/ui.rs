@@ -3,7 +3,7 @@ use crate::{
     model::{AppNotification, HostCommand, Item, NotificationKind, Page, Warden},
 };
 use plico::prelude::*;
-use plico::{BoxShadow, Input, Layout, SvgAsset};
+use plico::{BoxShadow, Input, Layout, LiquidGlass, SvgAsset};
 use plicowarden_sdk::{
     Request,
     ssh_agent::{AccessRecord, Outcome},
@@ -50,14 +50,45 @@ pub fn surface<'u, 'e>(ui: &'u mut UiContext<'e>) -> Layout<'u, 'e> {
         .corner_smoothing(1.)
         .background(Color::Literal(0xffffff))
         .border(1., Color::Literal(0xe7e4ee))
-        .shadow(BoxShadow {
-            offset_x: 0.,
-            offset_y: 6.,
-            blur: 18.,
-            spread: 0.,
-            color: Color::Literal(0x1b1826),
-            opacity: 0.06,
-        })
+        .elevation(Elevation::PANEL)
+}
+
+/// Scene-backed material reserved for app chrome and floating surfaces. Vault
+/// content cards remain opaque so secrets and metadata keep predictable contrast.
+pub fn chrome_glass() -> LiquidGlass {
+    LiquidGlass {
+        clarity: 0.56,
+        frost: 0.4,
+        tint_opacity: 0.08,
+        refraction: 0.85,
+        rim: 0.28,
+        ..LiquidGlass::regular()
+    }
+}
+
+/// More opaque than app chrome so text-heavy dialogs never compete with the
+/// vault visible behind them.
+pub fn dialog_glass() -> LiquidGlass {
+    LiquidGlass {
+        clarity: 0.24,
+        frost: 0.54,
+        tint_opacity: 0.2,
+        refraction: 0.7,
+        rim: 0.3,
+        ..LiquidGlass::regular()
+    }
+}
+
+/// A glass panel with the framework's paired contact and ambient shadows.
+#[track_caller]
+pub fn glass_surface<'u, 'e>(ui: &'u mut UiContext<'e>) -> Layout<'u, 'e> {
+    column(ui)
+        .width_percent(100.)
+        .shrink(0.)
+        .radius(18.)
+        .corner_smoothing(1.)
+        .material(chrome_glass())
+        .elevation(Elevation::PANEL)
 }
 /// Ordinary diagnostics use the native host clipboard, independently of the
 /// account worker, so copying never clears an error or starts an SDK session.
@@ -86,6 +117,21 @@ pub fn tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool) -> bool
     tooltip(ui, label).children(|ui| {
         (button_base(ui, label).width(32.).min_width(32.).max_width(32.).height(32.).min_height(32.).max_height(32.)
             .shrink(0.).padding(7.).radius(6.).corner_smoothing(1.)
+            .disabled(disabled) + |ui|
+        {
+            glyph(ui, name, 16., ICON);
+        }).response.clicked()
+    }).inner
+}
+/// MyGO-style compact title/toolbar action. Its visual height is deliberately
+/// smaller than ordinary content controls; the desktop toolbar owns the
+/// surrounding hit corridor and keyboard semantics.
+#[component]
+#[rustfmt::skip]
+pub fn toolbar_tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool) -> bool {
+    tooltip(ui, label).children(|ui| {
+        (button_base(ui, label).width(32.).min_width(32.).max_width(32.).height(28.).min_height(28.).max_height(28.)
+            .shrink(0.).padding(6.).radius(6.).corner_smoothing(1.)
             .disabled(disabled) + |ui|
         {
             glyph(ui, name, 16., ICON);
@@ -194,12 +240,12 @@ fn nav(
     selected: bool,
     disabled: bool,
 ) -> bool {
-    (plico::widgets::nav_entry(ui, label, selected).height(28.).min_height(28.).max_height(28.)
+    (plico::widgets::nav_entry_with_appearance(
+        ui, label, selected, plico::widgets::NavEntryAppearance::Quiet,
+    ).height(28.).min_height(28.).max_height(28.)
         .padding_x(8.).padding_y(3.).gap(7.).radius(8.)
         .border(0., EDGE).justify(Justify::Start).disabled(disabled).opacity(if disabled { 0.45 } else { 1. })
-        .color(INK)
-        .background(Color::Literal(0xffffff)).background_alpha(if selected { 0.62 } else { 0. })
-        .hover_background(Color::Literal(0xf1eef6)).transition(160) + |ui|
+        .transition(160) + |ui|
     {
         glyph(ui, name, 16., ICON);
         text(ui, label).grow(1.).font_size(13);
@@ -211,11 +257,11 @@ fn nav(
 #[component]
 #[rustfmt::skip]
 fn settings_nav(ui: &mut UiContext, icon: &str, label: &str, selected: bool) -> bool {
-    (plico::widgets::nav_entry(ui, label, selected).height(30.).padding_x(10.).padding_y(4.)
+    (plico::widgets::nav_entry_with_appearance(
+        ui, label, selected, plico::widgets::NavEntryAppearance::Quiet,
+    ).height(30.).padding_x(10.).padding_y(4.)
         .gap(8.).radius(8.).justify(Justify::Start).border(0., EDGE)
-        .color(INK)
-        .background(Color::Literal(0xebe8f1)).background_alpha(if selected { 1. } else { 0. })
-        .hover_background(Color::Literal(0xf3f1f7)).transition(140) + |ui|
+        .transition(140) + |ui|
     {
         glyph(ui, icon, 16., if selected { INK } else { MUTED });
         text(ui, label).font_size(13).weight(if selected { 600 } else { 500 })
@@ -375,15 +421,13 @@ fn flatten_folders(
 #[component]
 #[rustfmt::skip]
 fn folder_row(ui: &mut UiContext, row: &FolderRow, selected: bool, disabled: bool) -> bool {
-    (plico::widgets::nav_entry(ui, row.path.as_str(), selected).height(28.)
+    (plico::widgets::nav_entry_with_appearance(
+        ui, row.path.as_str(), selected, plico::widgets::NavEntryAppearance::Quiet,
+    ).height(28.)
         .min_height(28.).max_height(28.)
         .padding_left(8. + row.depth as f32 * 14.).padding_right(8.).padding_y(3.)
         .gap(7.).radius(8.).border(0., EDGE).justify(Justify::Start).disabled(disabled)
-        // Plicowarden uses a quiet light selection face, so its foreground
-        // remains dark even while the navigation tree owns keyboard focus.
-        .color(INK)
-        .background(Color::Literal(0xffffff)).background_alpha(if selected { 0.62 } else { 0. })
-        .hover_background(Color::Literal(0xf1eef6)).transition(160) + |ui| {
+        .transition(160) + |ui| {
         // Keep one leading icon lane, like MyGo. A disclosure chevron replaces
         // the folder glyph for branches instead of inserting a second lane
         // that indents every real folder relative to "No folder".
@@ -410,6 +454,20 @@ fn kind_group_label(kind: &str) -> &'static str {
         "note" => "Secure notes",
         "ssh-key" => "SSH keys",
         _ => "Other",
+    }
+}
+
+fn item_group_label(item: &Item, sort_by_type: bool) -> String {
+    if sort_by_type {
+        kind_group_label(&item.kind).to_owned()
+    } else {
+        item.name
+            .chars()
+            .next()
+            .map(|character| character.to_uppercase().next().unwrap_or(character))
+            .filter(|character| character.is_alphanumeric())
+            .unwrap_or('#')
+            .to_string()
     }
 }
 #[component]
@@ -492,6 +550,11 @@ impl Warden {
         let hide_list = single && self.compact_detail && !self.compact_sidebar;
         let hide_detail = single && !self.compact_detail && !self.compact_sidebar;
         let detail_visible = !single || (self.compact_detail && !self.compact_sidebar);
+        let presented_id = self.details.as_ref()
+            .map(|details| details.id.as_str())
+            .filter(|id| self.items.iter().any(|item| item.id == *id))
+            .unwrap_or(self.selected.as_str())
+            .to_owned();
         let action_item = (self.authenticated
             && detail_visible
             && !self.settings_open
@@ -500,7 +563,7 @@ impl Warden {
             .then(|| {
                 self.items
                     .iter()
-                    .find(|item| item.id == self.selected)
+                    .find(|item| item.id == presented_id)
                     .cloned()
             })
             .flatten();
@@ -525,7 +588,11 @@ impl Warden {
             // The custom window controls keep OS point size, so at UI zoom
             // levels below 100% the header must grow in logical units to keep
             // the panes clear of them.
-            let header_height = 48_f32.max(48. / self.zoom.factor() as f32 - 16.);
+            let header_height = if self.custom_titlebar {
+                44_f32.max(44. / self.zoom.factor() as f32)
+            } else {
+                40.
+            };
             column(ui).width_percent(100.).height_percent(100.).padding(8).gap(8) + |ui| {
                 row(ui).position(plico::Position::Relative).width_percent(100.).height(header_height)
                     .shrink(0.).padding_x(4).align(Align::Center).gap(12) + |ui|
@@ -535,17 +602,17 @@ impl Warden {
                     }
                     if narrow {
                         if self.compact_sidebar {
-                            if tool(ui, "back", "Back", false) {
+                            if toolbar_tool(ui, "back", "Back", false) {
                                 self.compact_sidebar = false;
                             }
                         } else if single && self.compact_detail {
-                            if tool(ui, "back", "Back", false) {
+                            if toolbar_tool(ui, "back", "Back", false) {
                                 self.compact_detail = false;
                             }
-                        } else if tool(ui, "sidebar", "Toggle sidebar", false) {
+                        } else if toolbar_tool(ui, "sidebar", "Toggle sidebar", false) {
                             self.compact_sidebar = true;
                         }
-                    } else if tool(ui, "sidebar", "Toggle sidebar", false) {
+                    } else if toolbar_tool(ui, "sidebar", "Toggle sidebar", false) {
                         let now = self.frame_time.now;
                         let old_target = if self.sidebar { 1. } else { 0. };
                         let current = self.sidebar_motion_started_at.map_or(old_target, |started| {
@@ -563,12 +630,10 @@ impl Warden {
                     if viewport_width >= 1000. {
                         let pill = 340.;
                         let x = (viewport_width * 0.5 - pill * 0.5 - 8.).max(120.);
-                        let y = (header_height - 32.) * 0.5;
+                        let y = (header_height - 28.) * 0.5;
                         if (button_base(ui, "Search or run a command").absolute(x, y)
-                            .width(pill).height(32.).padding_x(12.).gap(8.).radius(16.)
-                            .border(1., Color::Literal(0xe2deea))
-                            .background(Color::Literal(0xfbfafd))
-                            .hover_background(Color::Literal(0xf3f1f7))
+                            .width(pill).height(28.).padding_x(12.).gap(8.).radius(14.)
+                            .border(0., EDGE).material(chrome_glass()).elevation(Elevation::SUBTLE)
                             .justify(Justify::Start) + |ui| {
                             glyph(ui, "search", 14., MUTED);
                             text(ui, "Search or run a command").font_size(12).color(MUTED)
@@ -582,7 +647,7 @@ impl Warden {
                             self.palette_modal.open();
                             ui.request_rebuild();
                         }
-                    } else if tool(ui, "search", "Search or run a command", false) {
+                    } else if toolbar_tool(ui, "search", "Search or run a command", false) {
                         self.palette_query.clear();
                         self.palette_index = 0;
                         self.palette_modal.open();
@@ -599,7 +664,7 @@ impl Warden {
                             "Notifications".to_owned()
                         };
                         if tooltip(ui, description).children(|ui| {
-                            (button_base(ui, "Notifications").width(34.).height(32.).radius(8.)
+                            (button_base(ui, "Notifications").width(32.).height(28.).radius(6.)
                                 .border(0., EDGE).justify(Justify::Center).gap(3.)
                                 .background(Color::Panel).background_alpha(0.)
                                 .hover_background(Color::Literal(0xf3f1f7)) + |ui| {
@@ -614,15 +679,15 @@ impl Warden {
                     }
                     let show_global_actions = !(single && self.compact_detail && !self.compact_sidebar);
                     if show_global_actions {
-                        if tool(ui, "settings", "Settings", self.busy || self.editor.is_some()) {
+                        if toolbar_tool(ui, "settings", "Settings", self.busy || self.editor.is_some()) {
                             self.settings_open = true;
                         }
                         if self.authenticated {
-                            if tool(ui, "plus", "New item", self.busy || self.editor.is_some()) {
+                            if toolbar_tool(ui, "plus", "New item", self.busy || self.editor.is_some()) {
                                 self.editor = Some(crate::model::Editor::new());
                                 self.settings_open = false;
                             }
-                        } else if tool(ui, "login", "Connect account", false) {
+                        } else if toolbar_tool(ui, "login", "Connect account", false) {
                             self.open_login();
                             self.notice.clear();
                         }
@@ -715,6 +780,7 @@ impl Warden {
             self.confirm_ui(ui);
             self.bulk_confirmation(ui);
             self.ssh_approval_ui(ui);
+            self.auth_request_ui(ui);
             if self.custom_titlebar {
                 self.window_controls(ui);
             }
@@ -725,6 +791,35 @@ impl Warden {
     fn vault_content(&mut self, ui: &mut UiContext, visible: &[Item], layout: VaultContentLayout) {
         let VaultContentLayout { hide_list, hide_detail, single, narrow, viewport_width, list_width,
             compact, content_route, content_transition } = layout;
+        let presented_id = self.details.as_ref()
+            .map(|details| details.id.as_str())
+            .filter(|id| self.items.iter().any(|item| item.id == *id))
+            .unwrap_or(self.selected.as_str())
+            .to_owned();
+        let detail_mode = self.editor.is_none()
+            && self.router.show(Page::Vault)
+            && !visible.is_empty();
+        let detail_key = crate::model::business_key(&presented_id);
+        let pane_key = if detail_mode {
+            content_route ^ detail_key.rotate_left(17)
+        } else {
+            content_route
+        };
+        // The keyed scroll pane prevents fields from different vault items
+        // being reconciled as the same conditional nodes and gives every item
+        // an independent top scroll position. One injected-clock animation
+        // softens the atomic replacement without animating layout.
+        let detail_progress = if detail_mode && !ui.display_preferences().reduce_motion {
+            self.detail_transition_started_at.map_or(1., |started| {
+                let raw = ui.now().saturating_sub(started).as_secs_f64() / 0.16;
+                if raw < 1. {
+                    ui.request_animation_frame();
+                }
+                plico::Easing::EaseOut.sample(raw) as f32
+            })
+        } else {
+            1.
+        };
         column(ui).width(0.).grow(1.).min_width(0.).height_percent(100.)
             .gap(0) + |ui| {
             if self.bulk_mode && !self.settings_open {
@@ -739,11 +834,11 @@ impl Warden {
                 if hide_detail {
                     column(ui).width(0.).grow(1.).end();
                 } else {
-                    column(ui).key(content_route).width(0.).grow(1.).min_width(0.)
+                    column(ui).key(pane_key).width(0.).grow(1.).min_width(0.)
                         .height_percent(100.).scroll_y(self.editor.is_none())
                         .padding_bottom(if self.editor.is_some() { 0. } else { 38. })
                         .transition(content_transition)
-                        .gap(12).padding_x(16.).padding_top(0.) + |ui|
+                        .gap(12).padding_top(0.) + |ui|
                     {
                         if self.editor.is_some() {
                             self.editor_ui(ui);
@@ -788,9 +883,13 @@ impl Warden {
                             };
                             };
                         } else if let Some(item) = self.items.iter()
-                            .find(|i| i.id == self.selected).cloned()
+                            .find(|i| i.id == presented_id).cloned()
                         {
-                            self.detail(ui, &item, compact);
+                            column(ui).key(detail_key).width_percent(100.).gap(12)
+                                .opacity(0.94 + 0.06 * detail_progress)
+                                .motion(plico::Motion::None) + |ui| {
+                                self.detail(ui, &item, compact);
+                            };
                         }
                         if copyable_error(ui, &self.error) {
                             self.commands.push(
@@ -920,16 +1019,11 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     fn sync_progress_float(&mut self, ui: &mut UiContext) {
-        let [width, height] = ui.viewport_size();
         let mut close = false;
-        column(ui).absolute((width - 350.).max(8.), (height - 340.).max(8.))
+        column(ui).position(plico::Position::Absolute).inset_right(20.).inset_bottom(54.)
             .width(330.).max_height(260.).scroll_y(true).padding(14.).gap(8.)
-            .radius(14.).corner_smoothing(1.).background(Color::Panel)
-            .border(1., Color::Literal(0xe2deea))
-            .shadow(BoxShadow {
-                offset_x: 0., offset_y: 10., blur: 28., spread: 0.,
-                color: Color::Literal(0x241d36), opacity: 0.16,
-            }) + |ui| {
+            .radius(14.).corner_smoothing(1.).material(chrome_glass())
+            .elevation(Elevation::OVERLAY) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
                 text(ui, "Sync progress").font_size(13).weight(650).width(0.).grow(1.);
                 if (button_base(ui, "Close sync progress").width(24.).height(24.)
@@ -956,12 +1050,8 @@ impl Warden {
             .radius(18.).corner_smoothing(1.).clip(true).opacity(visibility)
             .translate(-16. * (1. - visibility), 0.)
             .disabled(!interactive)
-            .background(Color::Panel)
-            .border(1., Color::Literal(0xe7e4ee))
-            .shadow(BoxShadow {
-                offset_x: 0., offset_y: 8., blur: 24., spread: 0.,
-                color: Color::Literal(0x241d36), opacity: 0.07,
-            });
+            .material(chrome_glass())
+            .elevation(Elevation::PANEL);
         if overlay {
             panel = panel.absolute(0., 0.);
         }
@@ -1080,7 +1170,7 @@ impl Warden {
                         self.folders_modal.open();
                     }
                 };
-                let utilities_height = sidebar_rows_height(3);
+                let utilities_height = sidebar_rows_height(4);
                 if sidebar_section(ui, "Utilities", self.sidebar_utilities_open) {
                     self.sidebar_utilities_open = !self.sidebar_utilities_open;
                     ui.request_rebuild();
@@ -1096,6 +1186,11 @@ impl Warden {
                         !self.authenticated || self.busy || self.editor.is_some()) {
                         self.set_filter("One-time Codes");
                     }
+                    if nav(ui, "key", "Passkeys", None,
+                        self.router.show(Page::Vault) && self.filter == "Passkeys",
+                        !self.authenticated || self.busy || self.editor.is_some()) {
+                        self.set_filter("Passkeys");
+                    }
                     if nav(ui, "sliders", "Generator", None, self.router.show(Page::Generator),
                         self.busy || self.editor.is_some()) {
                         self.open_generator();
@@ -1104,12 +1199,9 @@ impl Warden {
             };
             column(ui).width_percent(100.).shrink(0.).padding_x(10.).padding_bottom(10.) + |ui| {
                 if (button_base(ui, "Switch account").width_percent(100.).padding(8.).gap(10.)
-                    .radius(14.).corner_smoothing(1.).border(1., Color::Literal(0xe7e4ee))
-                    .background(Color::Panel).hover_background(Color::Literal(0xf3f1f7))
-                    .shadow(BoxShadow {
-                        offset_x: 0., offset_y: 2., blur: 8., spread: 0.,
-                        color: Color::Literal(0x241d36), opacity: 0.06,
-                    }).disabled(self.busy) + |ui| {
+                    .radius(14.).corner_smoothing(1.).border(0., EDGE)
+                    .material(chrome_glass()).elevation(Elevation::CONTROL)
+                    .disabled(self.busy) + |ui| {
                     avatar(ui).fallback("A").size(34.).font_size(13).background(Color::Selection)
                         .color(Color::Literal(0x1d4ed8));
                     column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
@@ -1140,10 +1232,7 @@ impl Warden {
     #[rustfmt::skip]
     fn item_list(&mut self, ui: &mut UiContext, visible: &[Item], width: f32) {
         column(ui).width(width).shrink(0.).height_percent(100.).radius(18.).corner_smoothing(1.)
-            .background(Color::Panel).border(1., Color::Literal(0xe7e4ee)).shadow(BoxShadow {
-                offset_x: 0., offset_y: 6., blur: 22., spread: 0.,
-                color: Color::Literal(0x241d36), opacity: 0.07,
-            }).clip(true) + |ui| {
+            .material(chrome_glass()).elevation(Elevation::PANEL).clip(true) + |ui| {
             row(ui).width_percent(100.).height(48.).shrink(0.).padding_x(8.).align(Align::Center).gap(6) + |ui| {
                 column(ui).width(0.).grow(1.) + |ui| {
                     search_field(ui, "Search all vaults", "Search all vaults", &mut self.query);
@@ -1182,68 +1271,37 @@ impl Warden {
                     }
                 };
             }
-            column(ui).key(crate::model::business_key(&format!("list:{}", self.filter)))
-                .width_percent(100.).height(0.).grow(1.).scroll_y(true).padding(6).gap(6)
-                .transition(180) + |ui| {
-                    if self.reveal_list_selection {
-                        self.reveal_list_selection = false;
-                        let mut top = 6.;
-                        let mut last = None;
-                        let mut selected_top = None;
-                        for item in visible {
-                            let group = if self.sort_by_type {
-                                kind_group_label(&item.kind).to_owned()
-                            } else {
-                                item.name.chars().next()
-                                    .map(|c| c.to_uppercase().next().unwrap_or(c))
-                                    .filter(|c| c.is_alphanumeric()).unwrap_or('#')
-                                    .to_string()
-                            };
-                            if last.as_deref() != Some(group.as_str()) {
-                                last = Some(group);
-                                top += 20. + 6.;
-                            }
-                            if item.id == self.selected {
-                                selected_top = Some(top);
-                            }
-                            top += 58. + 6.;
-                        }
-                        if let Some(selected_top) = selected_top {
-                            let needed = ui.scroll_viewport().is_none_or(|[offset, height]| {
-                                selected_top < offset + 8.
-                                    || selected_top + 58. > offset + height - 8.
-                            });
-                            if needed {
-                                ui.scroll_to_y((selected_top - 84.).max(0.));
-                            }
-                        }
-                    }
-                    let mut group = None;
-                    let mut group_at = 0usize;
-                    for item in visible {
-                        let group_label = if self.sort_by_type {
-                            kind_group_label(&item.kind).to_owned()
-                        } else {
-                            item.name.chars().next()
-                                .map(|c| c.to_uppercase().next().unwrap_or(c))
-                                .filter(|c| c.is_alphanumeric()).unwrap_or('#')
-                                .to_string()
-                        };
-                        if group.as_deref() != Some(group_label.as_str()) {
-                            group = Some(group_label.clone());
-                            group_at += 1;
-                            let key = format!("Group {group_at} {group_label}");
-                            ui.keyed(crate::model::business_key(&key), |ui| {
-                                row(ui).width_percent(100.).height(20.).shrink(0.).padding_x(8)
-                                    .align(Align::Center) + |ui| {
-                                    text(ui, &group_label).font_size(11).weight(650).color(MUTED);
-                                };
-                            });
-                        }
-                        ui.keyed(crate::model::business_key(&item.id), |ui| {
+            self.item_rows(ui, visible);
+            };
+    }
+    #[component]
+    #[rustfmt::skip]
+    fn item_rows(&mut self, ui: &mut UiContext, visible: &[Item]) {
+        let mounted = ui.state(|| false);
+        let reveal = (std::mem::take(&mut self.reveal_list_selection) || !mounted.get())
+            .then(|| visible.iter().position(|item| item.id == self.selected))
+            .flatten();
+        mounted.set(true);
+        let sort_by_type = self.sort_by_type;
+        variable_virtual_list(ui, visible.len(), 70.)
+            .key(crate::model::business_key(&format!("list:{}", self.filter)))
+            .width_percent(100.).height(700.).fill().overscan(2).reveal(reveal).rows(
+                        |index| crate::model::business_key(&visible[index].id),
+                        |ui, index| {
+                            let item = &visible[index];
+                            let group_label = item_group_label(item, sort_by_type);
+                            let group_start = index == 0
+                                || item_group_label(&visible[index - 1], sort_by_type) != group_label;
+                            column(ui).width_percent(100.).shrink(0.).padding_x(6) + |ui| {
+                                if group_start {
+                                    row(ui).width_percent(100.).height(26.).shrink(0.).padding_x(8)
+                                        .align(Align::Center) + |ui| {
+                                        text(ui, &group_label).font_size(11).weight(650).color(MUTED);
+                                    };
+                                }
                             let selected = self.selected == item.id;
                             let mut clicked = false;
-                            row(ui).width_percent(100.).height(58.).shrink(0.).gap(6).align(Align::Center) + |ui| {
+                            row(ui).width_percent(100.).height(64.).shrink(0.).gap(6).align(Align::Start) + |ui| {
                                 if self.bulk_mode {
                                     let checked = self.bulk_selected.contains(&item.id);
                                     if (button_base(
@@ -1283,13 +1341,16 @@ impl Warden {
                                             text(ui, &item.user).font_size(12).color(MUTED)
                                                 .width_percent(100.).ellipsis(true);
                                         };
-                                        if item.favorite || item.has_totp {
+                                        if item.favorite || item.has_totp || item.has_passkey {
                                             row(ui).shrink(0.).gap(4.).align(Align::Center).padding_x(2.) + |ui| {
                                                 if item.favorite {
                                                     glyph(ui, "star", 12., Color::Literal(0xc39831));
                                                 }
                                                 if item.has_totp {
                                                     glyph(ui, "clock", 12., MUTED);
+                                                }
+                                                if item.has_passkey {
+                                                    glyph(ui, "key", 12., MUTED);
                                                 }
                                             };
                                         }
@@ -1302,10 +1363,9 @@ impl Warden {
                                     ui.request_rebuild();
                                 }
                             }
-                        });
-                    }
-                };
-            };
+                            };
+                        },
+            );
     }
     /// Triwarden's command palette: a floating search sheet for vault items
     /// and the few global actions that do not need a trip to Settings. Arrow
@@ -1346,6 +1406,7 @@ impl Warden {
             .header(false)
             .title("Search")
             .width(560.)
+            .material(dialog_glass())
             .motion(plico::Motion::None)
             .children(|ui| {
             let mut scroll_to = None;
@@ -1356,10 +1417,10 @@ impl Warden {
                     .autofocus(true).width_percent(100.)
                     .placeholder("Search items or commands")
                     .response();
-                if response.changed {
+                if response.changed() {
                     self.palette_index = 0;
                 }
-                if let Some(navigation) = response.navigation {
+                if let Some(navigation) = response.navigation() {
                     let step = match navigation {
                         InputNavigation::Previous => -1,
                         InputNavigation::Next => 1,
@@ -1387,7 +1448,7 @@ impl Warden {
                         scroll_to = Some((top - 48.).max(0.));
                     }
                 }
-                if response.submitted {
+                if response.submitted() {
                     activate = true;
                 }
                 column(ui).width_percent(100.).max_height(330.).scroll_y(true).gap(10.) + |ui| {
@@ -1458,7 +1519,7 @@ impl Warden {
                 };
             };
         });
-        if response.dismissed || cancel {
+        if response.dismissed() || cancel {
             state.close();
         }
         if activate && let Some(entry) = entries.get(self.palette_index) {
@@ -1584,16 +1645,10 @@ impl Warden {
     fn settings_modal_ui(&mut self, ui: &mut UiContext, state: &mut plico::ModalState) -> bool {
         let [viewport_width, viewport_height] = ui.viewport_size();
         let width = (viewport_width - 48.).clamp(560., 840.);
-        // Short panes stay a compact sheet; the SSH pane uses the extra room
-        // for history. A fixed tall sheet left a large blank area under
-        // Appearance.
-        let preferred = match self.settings_tab.as_str() {
-            "ssh" => 500.,
-            "account" => 640.,
-            "security" => 390.,
-            _ => 360.,
-        };
-        let height = (viewport_height - 160.).clamp(320., preferred);
+        // The sheet belongs to the window, not to the selected tab. Keep its
+        // frame stable and let the right pane scroll so switching sections
+        // never moves the dialog or the controls under the pointer.
+        let height = (viewport_height - 160.).clamp(420., 520.);
         // Settings is a full sheet of controls; an enter animation over that
         // much content reads as a stutter. It opens and closes in one step,
         // like a system settings window.
@@ -1601,6 +1656,7 @@ impl Warden {
             .header(false)
             .title("Settings")
             .width(width)
+            .material(dialog_glass())
             .motion(plico::Motion::None)
             .children(|ui| {
             column(ui).width_percent(100.).height(height).gap(0) + |ui| {
@@ -1659,10 +1715,7 @@ impl Warden {
                 };
             };
         });
-        if response.dismissed {
-            return true;
-        }
-        false
+        response.dismissed()
     }
     #[component]
     #[rustfmt::skip]
@@ -1774,6 +1827,23 @@ impl Warden {
                     "Ctrl + / − to zoom · Ctrl 0 for 100% · Save appearance to keep your scale"
                 },
             ).font_size(12).color(MUTED).width_percent(100.);
+            if cfg!(target_os = "linux") {
+                let before = self.appearance.custom_titlebar;
+                checkbox(
+                    ui,
+                    "Use custom title bar",
+                    &mut self.appearance.custom_titlebar,
+                );
+                text(ui, "Replace the desktop's native frame with Plicowarden's compact header. The window updates immediately; save to keep it.")
+                    .font_size(12).color(MUTED).width_percent(100.);
+                if self.appearance.custom_titlebar != before {
+                    self.custom_titlebar = self.appearance.custom_titlebar;
+                    self.commands.push(HostCommand::Window(
+                        plico_renderer::WindowCommand::SetDecorations(!self.custom_titlebar),
+                    ));
+                    ui.request_rebuild();
+                }
+            }
             row(ui).width_percent(100.).gap(10.).wrap(true) + |ui| {
                 if button(ui).icon(crate::icons::get("save")).text("Save appearance").primary()
                     .disabled(self.settings_saving).clicked()
@@ -1782,8 +1852,15 @@ impl Warden {
                     self.commands.push(HostCommand::SaveAppearance(self.appearance.clone()));
                 }
                 if button(ui).icon(crate::icons::get("restore")).text("Reset appearance").ghost().clicked() {
+                    let previous_titlebar = self.custom_titlebar;
                     self.appearance = Default::default();
                     self.zoom.set(self.appearance.ui_scale);
+                    self.custom_titlebar = self.appearance.custom_titlebar;
+                    if self.custom_titlebar != previous_titlebar {
+                        self.commands.push(HostCommand::Window(
+                            plico_renderer::WindowCommand::SetDecorations(!self.custom_titlebar),
+                        ));
+                    }
                     ui.request_rebuild();
                     self.notice = "Defaults restored. Save to keep them.".into();
                 }

@@ -1,4 +1,3 @@
-use plico_renderer::FrameSource;
 use plico_runtime::{
     HostView,
     testing::{Command, Driver},
@@ -34,32 +33,33 @@ fn rejected_http_login_preserves_password_for_retry_and_can_return_to_demo() {
     }));
     let mut ui = Driver::new(host, 1440, 1000).unwrap();
     click(&mut ui, "Connect account");
-    click(&mut ui, "bitwarden.com");
+    click(&mut ui, "Change server");
     click(&mut ui, "Self-hosted");
     type_text(&mut ui, "Server URL", "https://example.invalid");
     click(&mut ui, "Done");
     type_text(&mut ui, "Email address", "test@example.invalid");
     click(&mut ui, "Continue");
     // Bypass UI validation deliberately to exercise the SDK worker error path.
-    ui.source.view.app.server = "http://example.invalid".into();
+    ui.update_view(|view| view.app.server = "http://example.invalid".into())
+        .unwrap();
     type_text(&mut ui, "Master password", "synthetic-test-password");
     let tree = serde_json::to_string(&ui.declarations()).unwrap();
     assert!(!tree.contains("synthetic-test-password"));
     click(&mut ui, "Sign in");
-    assert!(!ui.source.view.app.password.is_empty());
+    assert!(!ui.view().app.password.is_empty());
     // Completion notification, not sleeping/polling for an arbitrary amount of time.
-    while ui.source.view.app.busy {
+    while ui.view().app.busy {
         rx.recv_timeout(Duration::from_secs(60))
             .expect("account worker did not finish");
-        ui.source.poll_async();
+        ui.poll_async().unwrap();
         ui.execute(Command::Snapshot).unwrap();
     }
-    assert!(ui.source.view.app.error.contains("HTTPS"));
-    assert!(!ui.source.view.app.password.is_empty());
-    assert!(!ui.source.view.app.authenticated);
+    assert!(ui.view().app.error.contains("HTTPS"));
+    assert!(!ui.view().app.password.is_empty());
+    assert!(!ui.view().app.authenticated);
     click(&mut ui, "Browse demo vault");
-    assert_eq!(ui.source.view.app.visible().len(), 12);
-    assert_eq!(ui.source.view.app.selected, "github");
+    assert_eq!(ui.view().app.visible().len(), 12);
+    assert_eq!(ui.view().app.selected, "github");
 }
 #[test]
 fn saving_appearance_runs_in_host_and_reopens_the_saved_projection() {
@@ -72,21 +72,32 @@ fn saving_appearance_runs_in_host_and_reopens_the_saved_projection() {
     }));
     let mut ui = Driver::new(host, 1440, 1000).unwrap();
     click(&mut ui, "Settings");
-    ui.source.view.app.zoom.set(1.25);
-    ui.execute(Command::Snapshot).unwrap();
+    if cfg!(target_os = "linux") {
+        ui.execute(Command::Click {
+            role: "checkbox".into(),
+            label: "Use custom title bar".into(),
+            occurrence: None,
+        })
+        .unwrap();
+        assert!(ui.view().app.custom_titlebar);
+        assert!(matches!(
+            ui.take_host_action(),
+            Some(plico_renderer::HostAction::Window(
+                plico_renderer::WindowCommand::SetDecorations(false)
+            ))
+        ));
+    }
+    ui.update_view(|view| view.app.zoom.set(1.25)).unwrap();
     click(&mut ui, "Save appearance");
-    while ui.source.view.app.settings_saving {
+    while ui.view().app.settings_saving {
         rx.recv_timeout(Duration::from_secs(60))
             .expect("appearance worker did not finish");
-        ui.source.poll_async();
+        ui.poll_async().unwrap();
         ui.execute(Command::Snapshot).unwrap();
     }
-    assert_eq!(
-        plicowarden::appearance::Appearance::load(&path)
-            .unwrap()
-            .ui_scale,
-        1.25
-    );
+    let appearance = plicowarden::appearance::Appearance::load(&path).unwrap();
+    assert_eq!(appearance.ui_scale, 1.25);
+    assert!(appearance.custom_titlebar);
 }
 
 #[test]
@@ -99,8 +110,8 @@ fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
     app.custom_titlebar = true;
     let mut ui = Driver::new(Host::new(app, false), 1440, 1000).unwrap();
     click(&mut ui, "Settings");
-    assert!(ui.source.view.app.settings_open);
-    assert!(ui.source.take_host_action().is_none());
+    assert!(ui.view().app.settings_open);
+    assert!(ui.take_host_action().is_none());
     // Settings is a modal sheet: close it before exercising the window drag.
     click(&mut ui, "Close settings");
     let bounds = ui
@@ -116,26 +127,26 @@ fn custom_header_routes_drag_once_and_keeps_toolbar_buttons_independent() {
         y: f64::from((bounds[1] + bounds[3]) / 2.),
     };
     for phase in [PointerPhase::Down, PointerPhase::Up, PointerPhase::Down] {
-        ui.source.handle_event(UiEvent::Pointer(PointerEvent {
+        ui.dispatch_event(UiEvent::Pointer(PointerEvent {
             phase,
             position,
             button: Some(PointerButton::Primary),
             buttons: if phase == PointerPhase::Down { 1 } else { 0 },
             modifiers: Modifiers::empty(),
             properties: Default::default(),
-        }));
-        ui.execute(Command::Snapshot).unwrap();
+        }))
+        .unwrap();
         if phase == PointerPhase::Down {
             assert!(matches!(
-                ui.source.take_host_action(),
+                ui.take_host_action(),
                 Some(HostAction::Window(WindowCommand::StartDragging))
             ));
         } else {
-            assert!(ui.source.take_host_action().is_none());
+            assert!(ui.take_host_action().is_none());
         }
         ui.execute(Command::Snapshot).unwrap();
         assert!(
-            ui.source.take_host_action().is_none(),
+            ui.take_host_action().is_none(),
             "drag command repeated while held"
         );
     }
@@ -158,11 +169,8 @@ fn custom_window_buttons_dispatch_real_commands_on_vault_and_login() {
             ("Close window", WindowCommand::Close),
         ] {
             click(&mut ui, label);
-            assert_eq!(
-                ui.source.take_host_action(),
-                Some(HostAction::Window(expected))
-            );
-            assert!(ui.source.take_host_action().is_none());
+            assert_eq!(ui.take_host_action(), Some(HostAction::Window(expected)));
+            assert!(ui.take_host_action().is_none());
         }
     }
 }
@@ -189,18 +197,21 @@ fn saving_security_updates_live_preferences_only_after_successful_persistence() 
             occurrence: None,
         })
         .unwrap();
-        ui.source.view.app.security.auto_lock_minutes = 1;
-        ui.source.view.app.security.clipboard_seconds = 10;
+        ui.update_view(|view| {
+            view.app.security.auto_lock_minutes = 1;
+            view.app.security.clipboard_seconds = 10;
+        })
+        .unwrap();
         click(&mut ui, "Save changes");
-        while ui.source.view.app.security_saving {
+        while ui.view().app.security_saving {
             rx.recv_timeout(Duration::from_secs(10))
                 .expect("security worker did not finish");
-            ui.source.poll_async();
+            ui.poll_async().unwrap();
             ui.execute(Command::Snapshot).unwrap();
         }
         if fail {
-            assert!(!ui.source.view.app.error.is_empty());
-            assert_eq!(ui.source.view.app.active_security.auto_lock_minutes, 5);
+            assert!(!ui.view().app.error.is_empty());
+            assert_eq!(ui.view().app.active_security.auto_lock_minutes, 5);
         } else {
             assert_eq!(
                 plicowarden::security::load(&path)
@@ -208,7 +219,7 @@ fn saving_security_updates_live_preferences_only_after_successful_persistence() 
                     .auto_lock_minutes,
                 1
             );
-            assert_eq!(ui.source.view.app.active_security.clipboard_seconds, 10);
+            assert_eq!(ui.view().app.active_security.clipboard_seconds, 10);
         }
     }
 }
@@ -228,16 +239,16 @@ Additional diagnostic detail.";
     let mut ui = Driver::new(Host::new(app, false), 1000, 720).unwrap();
     click(&mut ui, "Copy error");
     assert_eq!(
-        ui.source.take_host_action(),
+        ui.take_host_action(),
         Some(HostAction::SetClipboard(message.into()))
     );
-    assert_eq!(ui.source.view.app.error, message);
-    assert!(!ui.source.view.app.busy);
-    assert!(ui.source.view.app.pending.is_none());
-    assert!(!ui.source.view.app.authenticated);
+    assert_eq!(ui.view().app.error, message);
+    assert!(!ui.view().app.busy);
+    assert!(ui.view().app.pending.is_none());
+    assert!(!ui.view().app.authenticated);
     click(&mut ui, "Copy error");
     assert_eq!(
-        ui.source.take_host_action(),
+        ui.take_host_action(),
         Some(HostAction::SetClipboard(message.into()))
     );
 }

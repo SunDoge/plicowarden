@@ -111,9 +111,12 @@ impl plico_dev::App for Warden {
         key.phase == plico::KeyPhase::Down
             && !key.synthetic
             && key.modifiers.is_empty()
-            && self.on_key(&key.key)
+            && self.handle_plain_key(&key.key)
     }
-    fn on_key(&mut self, key: &str) -> bool {
+}
+
+impl Warden {
+    fn handle_plain_key(&mut self, key: &str) -> bool {
         if key == "Escape" && self.notification_open {
             self.notification_open = false;
             return true;
@@ -232,6 +235,25 @@ impl PreviewConfig {
                             process_id: Some(1234),
                         },
                     )),
+                });
+            }
+            "login-approval" => {
+                app.authenticated = true;
+                app.account_email = "recipe@example.invalid".into();
+                app.region = "self-hosted".into();
+                app.server = "https://vault.example.invalid".into();
+                app.apply(plicowarden_sdk::Event {
+                    ticket: 0,
+                    result: Ok(plicowarden_sdk::Reply::AuthRequests(vec![
+                        plicowarden_sdk::service::AuthRequest {
+                            id: "018f767d-6d67-7b5a-a281-9a54fd2f15b7".into(),
+                            device_type: "Firefox extension on Linux".into(),
+                            ip_address: "203.0.113.42".into(),
+                            country: Some("Hong Kong".into()),
+                            created: Some("2026-11-12T08:30:00Z".into()),
+                            fingerprint: "paperweight-rinsing-pavilion-uncooked-unicycle".into(),
+                        },
+                    ])),
                 });
             }
             "ssh-history" => {
@@ -414,6 +436,7 @@ fn synthetic_folder_details() -> plicowarden_sdk::service::ItemDetails {
         favorite: true,
         has_password: true,
         has_totp: false,
+        passkeys: Vec::new(),
         has_card_number: false,
         has_card_code: false,
         editable: true,

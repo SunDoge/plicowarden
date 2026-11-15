@@ -130,6 +130,15 @@ CPU raster cache bytes. This offscreen test includes CPU readback storage and
 platform driver overhead; RSS is not interchangeable with macOS Activity Monitor
 footprint. Cache trimming need not immediately return allocator/driver pages.
 
+The vault uses Plico's variable-height virtual list, so retained UI nodes scale
+with the viewport rather than the account size. In the 108-item scrolling probe
+at 1440×1000 logical pixels and 2× device scale, the warm median retained-node
+count fell from 1,036 to 372 (64%). Median RSS fell from 299,160 to 292,192 KiB.
+GPU time stayed effectively flat (19.93 to 19.42 ms) because the same visible
+pixels, shadows and offscreen readback are still rendered; virtualization is a
+retained-tree and large-vault bound, not a claim that it reduces visible-pixel
+cost. `tests/ui.rs` keeps the mounted tree below 500 nodes for this fixture.
+
 ## Development and architecture
 
 Root dev settings keep the framework at opt1 and third-party dependencies at
@@ -217,7 +226,7 @@ Normal launches create a native tray icon (a template image in the macOS menu ba
 Its menu opens the window, locks the vault, or quits the process. Closing the app
 window keeps its SDK worker alive when a tray host is available; automatic locking
 continues while hidden. Quit revokes the SSH signing gate and drops the worker.
-The menu has persistent “Keep running when closed” and “SSH approval notifications”
+The menu has persistent “Keep running when closed” and “Approval notifications”
 options in device-local `desktop.json`, both enabled by default.
 
 New accepted SSH approval requests show a generic system notification. Clicking it
@@ -327,13 +336,15 @@ composable test authoring; the older runner remains for its original benchmark.
 
 ## Appearance
 
-The application uses ordinary Plico widgets throughout, including toolbars,
-login, settings and dialogs. White panels sit on a neutral gray background;
-controls use MyGo's light palette, 6px corners and blue accents. Circular icon
-buttons keep their circular shape. Borders and subtle shadows separate surfaces.
-No backdrop blur, refraction or ambience shader is declared by the application.
+The application uses ordinary Plico widgets throughout. Scene-backed
+`LiquidGlass::regular()` is reserved for application chrome: the navigation and
+item-list panes, login card, command trigger, sync overlay and dialogs. Secret
+fields and vault content cards remain opaque for predictable contrast. Paired
+Plico elevation tokens replace application-specific single shadows, while
+continuous corners, reduced-transparency fallback and reduced-motion behavior
+come from the framework material.
 
 Interface scale remains persistent. Older appearance files are accepted: obsolete
 glass preferences are ignored, while the saved scale is retained. The legacy
-`opaque` preview input is accepted for existing recipes; all previews now use
-solid surfaces.
+`opaque` preview input is accepted for existing recipes but no longer selects a
+separate rendering path.

@@ -260,7 +260,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -666,7 +666,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_repr",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "uuid",
@@ -684,7 +684,7 @@ dependencies = [
  "bitwarden-uuid",
  "serde",
  "serde_repr",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "uuid",
 ]
 
@@ -719,7 +719,7 @@ dependencies = [
  "serde_json",
  "serde_qs",
  "serde_repr",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tracing",
  "url",
  "uuid",
@@ -771,10 +771,10 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_repr",
- "sha1",
+ "sha1 0.11.0",
  "sha2 0.11.1",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "typenum",
@@ -804,7 +804,7 @@ dependencies = [
  "bitwarden-crypto",
  "bitwarden-sync",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -815,7 +815,7 @@ dependencies = [
  "data-encoding",
  "data-encoding-macro",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -856,7 +856,7 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "url",
  "uuid",
  "zeroize",
@@ -882,7 +882,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tracing",
  "uuid",
 ]
@@ -902,7 +902,7 @@ dependencies = [
  "schemars 1.2.3",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -921,7 +921,7 @@ dependencies = [
  "data-encoding",
  "keepass",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "uuid",
  "zeroize",
 ]
@@ -962,7 +962,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "zeroize",
 ]
 
@@ -979,7 +979,7 @@ dependencies = [
  "bitwarden-organization-crypto",
  "chrono",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "uuid",
 ]
 
@@ -1020,7 +1020,7 @@ dependencies = [
  "bitwarden-user-crypto-management",
  "bitwarden-vault",
  "reqwest-middleware",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tracing",
 ]
 
@@ -1045,7 +1045,7 @@ source = "git+https://github.com/bitwarden/sdk-internal.git?rev=fbd21679c1c3690c
 dependencies = [
  "bitwarden-error",
  "rand 0.10.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "uuid",
 ]
 
@@ -1067,7 +1067,7 @@ dependencies = [
  "serde",
  "serde_repr",
  "sha2 0.11.1",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "uuid",
  "zeroize",
 ]
@@ -1092,7 +1092,7 @@ dependencies = [
  "reqwest",
  "reqwest-middleware",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
 ]
@@ -1117,7 +1117,7 @@ dependencies = [
  "serde",
  "ssh-cipher 0.3.0",
  "ssh-key 0.7.0-rc.11",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1133,7 +1133,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tsify",
@@ -1160,7 +1160,7 @@ dependencies = [
  "bitwarden-state",
  "chrono",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
 ]
@@ -1172,7 +1172,7 @@ source = "git+https://github.com/bitwarden/sdk-internal.git?rev=fbd21679c1c3690c
 dependencies = [
  "bitwarden-error",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "tracing",
@@ -1186,7 +1186,7 @@ dependencies = [
  "bitwarden-core",
  "bitwarden-crypto",
  "bitwarden-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tracing",
 ]
 
@@ -1208,7 +1208,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_bytes",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "uuid",
@@ -1258,10 +1258,10 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
- "sha1",
+ "sha1 0.11.0",
  "sha2 0.11.1",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2438,15 +2438,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "elsa"
-version = "1.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9abf33c656a7256451ebb7d0082c5a471820c31269e49d807c538c252352186e"
-dependencies = [
- "stable_deref_trait",
-]
-
-[[package]]
 name = "endi"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2486,7 +2477,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2937,7 +2928,7 @@ dependencies = [
  "gobject-sys",
  "libc",
  "system-deps",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4779,7 +4770,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5328,8 +5319,8 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "plico"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5344,13 +5335,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "plico-app-host"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+dependencies = [
+ "plico",
+ "plico-dev",
+ "plico-runtime",
+]
+
+[[package]]
 name = "plico-desktop"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "image",
  "peniko",
  "plico",
+ "plico-app-host",
  "plico-dev",
  "plico-renderer",
  "plico-runtime",
@@ -5364,8 +5366,8 @@ dependencies = [
 
 [[package]]
 name = "plico-dev"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5377,8 +5379,8 @@ dependencies = [
 
 [[package]]
 name = "plico-macros"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5388,8 +5390,8 @@ dependencies = [
 
 [[package]]
 name = "plico-motion"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "plico",
  "serde",
@@ -5399,8 +5401,8 @@ dependencies = [
 
 [[package]]
 name = "plico-native"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "cairo-rs",
  "lru",
@@ -5421,8 +5423,8 @@ dependencies = [
 
 [[package]]
 name = "plico-renderer"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5436,7 +5438,6 @@ dependencies = [
  "peniko",
  "plico",
  "plico-motion",
- "rustc-hash 2.1.3",
  "serde",
  "serde_json",
  "snafu",
@@ -5444,26 +5445,21 @@ dependencies = [
  "tracing",
  "unicode-segmentation",
  "usvg",
- "web-sys",
  "web-time",
- "wgpu",
 ]
 
 [[package]]
 name = "plico-runtime"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
- "elsa",
  "kurbo",
  "peniko",
  "plico",
- "plico-dev",
  "plico-motion",
  "plico-renderer",
  "serde",
  "serde_json",
- "slotmap",
  "snafu",
  "taffy",
  "tracing",
@@ -5474,8 +5470,8 @@ dependencies = [
 
 [[package]]
 name = "plico-shell"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5513,8 +5509,8 @@ dependencies = [
 
 [[package]]
 name = "plico-wgpu"
-version = "0.3.2"
-source = "git+https://github.com/SunDoge/plico.git?rev=91f38b58f7bd98830f24acdb50e90eb4cc5283f1#91f38b58f7bd98830f24acdb50e90eb4cc5283f1"
+version = "0.4.0"
+source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -5532,6 +5528,7 @@ dependencies = [
  "pollster 1.0.1",
  "raw-window-handle",
  "resvg",
+ "rustc-hash 2.1.3",
  "snafu",
  "tracing",
  "wgpu",
@@ -5574,6 +5571,7 @@ dependencies = [
  "bitwarden-core",
  "bitwarden-crypto",
  "bitwarden-crypto-sync-handler",
+ "bitwarden-encoding",
  "bitwarden-exporters",
  "bitwarden-importers",
  "bitwarden-pm",
@@ -5582,12 +5580,14 @@ dependencies = [
  "bitwarden-vault",
  "chrono",
  "directories",
+ "futures-util",
  "http",
  "image",
  "memsec",
  "rand 0.8.8",
  "reqwest",
  "reqwest-middleware",
+ "rmp-serde",
  "rsa 0.9.10",
  "rusqlite",
  "rustix",
@@ -5599,6 +5599,7 @@ dependencies = [
  "ssh-agent-lib",
  "tempfile",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
  "url",
  "uuid",
@@ -5872,8 +5873,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e058c7de0b26af77780c769414d6257830bb240f3c38477dbc2c16e5f54d6d4c"
 dependencies = [
  "libc",
- "rand_chacha",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9ef1d0d795eb7d84685bca4f72f3649f064e6641543d3a8c415898726a57b41"
+dependencies = [
+ "rand_chacha 0.9.0",
+ "rand_core 0.9.5",
 ]
 
 [[package]]
@@ -5898,12 +5909,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_chacha"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.9.5",
+]
+
+[[package]]
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 dependencies = [
  "getrandom 0.2.17",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
+dependencies = [
+ "getrandom 0.3.4",
 ]
 
 [[package]]
@@ -6356,7 +6386,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6413,7 +6443,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6434,7 +6464,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6834,6 +6864,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca7589fb29bd43a2eccdc7331723ecf898243ca95a94aa8855bc0e117c3c867f"
 dependencies = [
  "raunch",
+]
+
+[[package]]
+name = "sha1"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -7394,10 +7435,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7585,6 +7626,22 @@ checksum = "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
 dependencies = [
  "rustls",
  "tokio",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
+dependencies = [
+ "futures-util",
+ "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
+ "tokio",
+ "tokio-rustls",
+ "tungstenite",
 ]
 
 [[package]]
@@ -7827,6 +7884,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 
 [[package]]
+name = "tungstenite"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8628dcc84e5a09eb3d8423d6cb682965dea9133204e8fb3efee74c2a0c259442"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.9.5",
+ "rustls",
+ "rustls-pki-types",
+ "sha1 0.10.7",
+ "thiserror 2.0.21",
+ "utf-8",
+]
+
+[[package]]
 name = "twofish"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7976,6 +8052,12 @@ dependencies = [
  "unicode-vo",
  "xmlwriter",
 ]
+
+[[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utf8_iter"
@@ -8477,7 +8559,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

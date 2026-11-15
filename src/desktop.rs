@@ -70,7 +70,7 @@ impl DesktopHost {
                 "Tray unavailable. Closing the window will quit Plicowarden.".into(),
             )),
             DesktopEvent::NotificationFailed(_) => Some(AppEvent::Notice(
-                "System notification unavailable. Review SSH approvals in Plicowarden.".into(),
+                "System notification unavailable. Review pending approvals in Plicowarden.".into(),
             )),
             _ => None,
         }
@@ -82,6 +82,18 @@ impl DesktopHost {
             NotificationRequest {
                 title: "SSH signing approval".into(),
                 body: Some("Open Plicowarden to review a pending request.".into()),
+                icon: None,
+                silent: false,
+            },
+        );
+    }
+    pub fn notify_sign_in(&self) {
+        // Do not expose the account, server, address or fingerprint on a lock screen.
+        let _ = self.native.handle().notify(
+            2,
+            NotificationRequest {
+                title: "Sign-in approval".into(),
+                body: Some("Open Plicowarden to review a pending device request.".into()),
                 icon: None,
                 silent: false,
             },
@@ -124,7 +136,7 @@ pub fn integration() -> (DesktopHost, TrayExtension) {
             ),
             toggle(
                 "notifications",
-                "SSH approval notifications",
+                "Approval notifications",
                 preferences.ssh_notifications,
             ),
             TrayItem::Separator,

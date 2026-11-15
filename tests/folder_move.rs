@@ -1,7 +1,5 @@
-use plico_runtime::{
-    NativeApp,
-    testing::{Command, Driver},
-};
+use plico_desktop::NativeApp;
+use plico_runtime::testing::{Command, Driver};
 use plicowarden::{PreviewConfig, Warden, model::HostCommand};
 use plicowarden_sdk::Request;
 fn fixture() -> Warden {
@@ -23,14 +21,14 @@ fn click(ui: &mut Driver<NativeApp<Warden>>, role: &str, label: &str) {
 fn single_move_can_remove_a_folder_and_keeps_the_current_item_selected() {
     let mut ui = Driver::new(NativeApp(fixture()), 820, 640).unwrap();
     click(&mut ui, "button", "Move to folder");
-    assert_eq!(ui.source.view.0.move_ids, ["github"]);
+    assert_eq!(ui.view().0.move_ids, ["github"]);
     click(&mut ui, "combobox", "Destination folder");
     ui.advance(std::time::Duration::from_millis(250)).unwrap();
     click(&mut ui, "option", "No folder");
     ui.advance(std::time::Duration::from_millis(250)).unwrap();
     click(&mut ui, "button", "Move selected items");
-    assert_eq!(ui.source.view.0.selected, "github");
-    assert!(ui.source.view.0.commands.iter().any(|command| matches!(command,
+    assert_eq!(ui.view().0.selected, "github");
+    assert!(ui.view().0.commands.iter().any(|command| matches!(command,
         HostCommand::Account { request, .. } if matches!(request.as_ref(), Request::MoveToFolder { ids, folder_id: None } if ids == &["github"]))));
 }
 #[test]

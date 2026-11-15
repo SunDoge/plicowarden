@@ -7,6 +7,7 @@ mod writes;
 pub use writes::LoginWrite;
 // Adapted from Warden Desktop's GPL-3.0-only SDK service (see the app README).
 use async_trait::async_trait;
+use bitwarden_api_api::models::AuthRequestUpdateRequestModel;
 use bitwarden_api_api::models::SyncResponseModel;
 use bitwarden_core::auth::login::{
     LoginError, PasswordLoginRequest, PasswordLoginResponse, TwoFactorEmailRequest,
@@ -14,6 +15,7 @@ use bitwarden_core::auth::login::{
 };
 use bitwarden_core::{ClientSettings, DeviceType, FromClient};
 use bitwarden_crypto_sync_handler::CryptoSyncHandler;
+use bitwarden_encoding::B64;
 use bitwarden_pm::PasswordManagerClient;
 use bitwarden_sync::{SyncClient, SyncHandler, SyncHandlerError, SyncRequest};
 use bitwarden_vault::{
@@ -22,12 +24,19 @@ use bitwarden_vault::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use zeroize::{Zeroize, Zeroizing};
 const DEFAULT_AUTO_LOCK_AFTER: Duration = Duration::from_secs(300);
 const CACHED_REAUTH_PASSWORD_TTL: Duration = Duration::from_secs(120);
+// sdk-internal fbd21679's password login registers this exact identifier in
+// bitwarden-core/src/auth/login/password.rs. Official Server validates that an
+// auth-request response comes from the same registered device. Keep this in
+// sync with the pinned SDK until its login API accepts an application ID.
+const PASSWORD_LOGIN_DEVICE_IDENTIFIER: &str = "b86dd6ab-4265-4ddf-a7f1-eb28d5677f33";
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
@@ -100,6 +109,17 @@ pub enum LoginOutcome {
 
 #[derive(Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AuthRequest {
+    pub id: String,
+    pub device_type: String,
+    pub ip_address: String,
+    pub country: Option<String>,
+    pub created: Option<String>,
+    pub fingerprint: String,
+}
+
+#[derive(Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct VaultItem {
     pub id: String,
     pub name: String,
@@ -109,12 +129,28 @@ pub struct VaultItem {
     pub has_username: bool,
     pub has_password: bool,
     pub has_totp: bool,
+    pub has_passkey: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icon_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub folder_id: Option<String>,
     pub deleted: bool,
     pub archived: bool,
+}
+
+/// Passkey display metadata shown only while the vault item is decrypted.
+/// Private key material and credential IDs never cross the service boundary.
+#[derive(Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PasskeyDetails {
+    pub rp_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rp_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_display_name: Option<String>,
+    pub created_at: i64,
 }
 
 #[derive(Clone, Serialize, PartialEq, Eq)]
@@ -176,6 +212,7 @@ pub struct ItemDetails {
     pub favorite: bool,
     pub has_password: bool,
     pub has_totp: bool,
+    pub passkeys: Vec<PasskeyDetails>,
     pub has_card_number: bool,
     pub has_card_code: bool,
     pub editable: bool,
@@ -358,6 +395,7 @@ pub struct VaultService {
     cache_warning: Arc<StdMutex<Option<String>>>,
     offline: std::sync::atomic::AtomicBool,
     clipboard: std::sync::OnceLock<crate::clipboard::ClipboardService>,
+    auth_requests: HashMap<uuid::Uuid, String>,
 }
 
 impl Default for VaultService {
@@ -376,6 +414,7 @@ impl Default for VaultService {
             cache_warning: Arc::new(StdMutex::new(None)),
             offline: std::sync::atomic::AtomicBool::new(false),
             clipboard: std::sync::OnceLock::new(),
+            auth_requests: HashMap::new(),
         }
     }
 }
@@ -392,6 +431,15 @@ impl VaultService {
         if let Some(clipboard) = self.clipboard.get() {
             clipboard.set_lifetime(settings.clipboard_seconds);
         }
+    }
+    pub(crate) fn notification_source(&self) -> Option<(String, Arc<crate::cache::State>)> {
+        self.session.as_ref()?;
+        let config = self.cache_config.as_ref()?;
+        let state = self.cache_state.as_ref()?.clone();
+        notification_hub_url(config)
+            .ok()
+            .flatten()
+            .map(|url| (url, state))
     }
     pub fn note_activity(&mut self) -> bool {
         // Input cannot revive a session whose deadline has already elapsed.
@@ -484,6 +532,107 @@ impl VaultService {
             .establish_session(email, client, icon_base_url, progress)
             .await?;
         Ok(LoginOutcome::Authenticated { snapshot })
+    }
+
+    pub async fn pending_auth_requests(&mut self) -> Result<Vec<AuthRequest>, String> {
+        let session = self.session.as_ref().ok_or("Unlock your vault first.")?;
+        let response = session
+            .client
+            .0
+            .internal
+            .get_api_configurations()
+            .api_client
+            .auth_requests_api()
+            .get_pending_auth_requests()
+            .await
+            .map_err(|error| {
+                format!(
+                    "Could not check pending sign-in requests.{}",
+                    diagnostics::error_detail(&error)
+                )
+            })?;
+        let mut requests = Vec::new();
+        let mut current = HashMap::new();
+        for request in response.data.unwrap_or_default() {
+            if !auth_request_is_fresh(request.creation_date.as_deref()) {
+                continue;
+            }
+            let (Some(id), Some(public_key)) = (request.id, request.public_key) else {
+                continue;
+            };
+            if request.request_approved.is_some() {
+                continue;
+            }
+            let encoded = B64::from_str(&public_key)
+                .map_err(|_| "A pending sign-in request contains an invalid public key.")?;
+            let fingerprint = bitwarden_crypto::fingerprint(
+                &session.email.trim().to_lowercase(),
+                &bitwarden_crypto::SpkiPublicKeyBytes::from(encoded.as_bytes()),
+            )
+            .map_err(|_| "Could not calculate the sign-in fingerprint phrase.")?;
+            current.insert(id, public_key);
+            requests.push(AuthRequest {
+                id: id.to_string(),
+                device_type: request
+                    .request_device_type
+                    .unwrap_or_else(|| "Unknown device".into()),
+                ip_address: request
+                    .request_ip_address
+                    .unwrap_or_else(|| "Unknown".into()),
+                country: request
+                    .request_country_name
+                    .filter(|value| !value.is_empty()),
+                created: request.creation_date.map(format_auth_request_time),
+                fingerprint,
+            });
+        }
+        self.auth_requests = current;
+        Ok(requests)
+    }
+
+    pub async fn answer_auth_request(&mut self, id: &str, approve: bool) -> Result<(), String> {
+        let id = uuid::Uuid::parse_str(id).map_err(|_| "The sign-in request is invalid.")?;
+        let session = self.session.as_ref().ok_or("Unlock your vault first.")?;
+        let public_key = self
+            .auth_requests
+            .get(&id)
+            .ok_or("This sign-in request expired. Check for requests again.")?;
+        let key = if approve {
+            Some(
+                session
+                    .client
+                    .0
+                    .auth()
+                    .approve_auth_request(
+                        B64::from_str(public_key)
+                            .map_err(|_| "The sign-in request public key is invalid.")?,
+                    )
+                    .map_err(|_| "Could not protect the vault key for the requesting device.")?
+                    .to_string(),
+            )
+        } else {
+            None
+        };
+        let mut body =
+            AuthRequestUpdateRequestModel::new(PASSWORD_LOGIN_DEVICE_IDENTIFIER.into(), approve);
+        body.key = key;
+        session
+            .client
+            .0
+            .internal
+            .get_api_configurations()
+            .api_client
+            .auth_requests_api()
+            .put(id, Some(body))
+            .await
+            .map_err(|error| {
+                format!(
+                    "Could not answer the sign-in request.{}",
+                    diagnostics::error_detail(&error)
+                )
+            })?;
+        self.auth_requests.remove(&id);
+        Ok(())
     }
 
     /// Retry an expired cached token with the password that unlocked this
@@ -984,6 +1133,18 @@ impl VaultService {
             .ok_or_else(|| "This item has no password.".into())
     }
 
+    pub async fn reveal_card_number(&self, id: &str) -> Result<Zeroizing<String>, String> {
+        let view = self.decrypt_one(id).await?;
+        if !view.view_password {
+            return Err("This item does not allow card-number viewing.".into());
+        }
+        view.card
+            .and_then(|card| card.number)
+            .filter(|number| !number.is_empty())
+            .map(Zeroizing::new)
+            .ok_or_else(|| "This item has no card number.".into())
+    }
+
     pub async fn totp_code(&self, id: &str) -> Result<TotpCode, String> {
         let view = self.decrypt_one(id).await?;
         totp_code_from_view(&view, Utc::now())
@@ -991,7 +1152,23 @@ impl VaultService {
 
     async fn item_details(&self, id: &str, include_secrets: bool) -> Result<ItemDetails, String> {
         let view = self.decrypt_one(id).await?;
-        Ok(item_details_from_view(view, include_secrets))
+        let session = self.session.as_ref().ok_or_else(locked)?;
+        let passkeys = session
+            .client
+            .vault()
+            .ciphers()
+            .decrypt_fido2_credentials(view.clone())
+            .map_err(|_| "The SDK could not decrypt this item's passkeys.".to_string())?
+            .into_iter()
+            .map(|passkey| PasskeyDetails {
+                rp_id: passkey.rp_id,
+                rp_name: passkey.rp_name,
+                user_name: passkey.user_name,
+                user_display_name: passkey.user_display_name,
+                created_at: passkey.creation_date.timestamp(),
+            })
+            .collect();
+        Ok(item_details_from_view(view, include_secrets, passkeys))
     }
 
     async fn decrypt_one(&self, id: &str) -> Result<CipherView, String> {
@@ -1038,10 +1215,14 @@ impl VaultService {
             self.reveal_password(id).await?
         } else {
             let view = self.decrypt_one(id).await?;
+            if field == "cardNumber" && !view.view_password {
+                return Err("This item does not allow card-number copying.".into());
+            }
             Zeroizing::new(
                 match field {
                     "username" => view.login.and_then(|login| login.username),
                     "notes" => view.notes,
+                    "cardNumber" => view.card.and_then(|card| card.number),
                     _ => return Err("Choose a supported copy field.".into()),
                 }
                 .ok_or("This field is empty.")?,
@@ -1059,6 +1240,7 @@ impl VaultService {
         *self.cache_warning.lock().unwrap() = None;
         self.session = None;
         self.pending_login = None;
+        self.auth_requests.clear();
         self.clear_cached_reauth();
         if let Some(clipboard) = self.clipboard.get() {
             clipboard.clear();
@@ -1085,6 +1267,19 @@ impl VaultService {
     pub fn is_locked(&self) -> bool {
         self.session.is_none()
     }
+}
+
+fn format_auth_request_time(value: String) -> String {
+    chrono::DateTime::parse_from_rfc3339(&value)
+        .map(|time| time.format("%b %-d, %Y · %H:%M %Z").to_string())
+        .unwrap_or(value)
+}
+
+fn auth_request_is_fresh(value: Option<&str>) -> bool {
+    value
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|created| Utc::now().signed_duration_since(created).num_minutes() < 15)
+        .unwrap_or(true)
 }
 async fn install_organization_keys(
     client: &PasswordManagerClient,
@@ -1172,7 +1367,11 @@ fn totp_code_from_view(view: &CipherView, now: chrono::DateTime<Utc>) -> Result<
     })
 }
 
-fn item_details_from_view(view: CipherView, include_secrets: bool) -> ItemDetails {
+fn item_details_from_view(
+    view: CipherView,
+    include_secrets: bool,
+    passkeys: Vec<PasskeyDetails>,
+) -> ItemDetails {
     let login = view.login.as_ref();
     let card = view.card.as_ref();
     let identity = view.identity.as_ref();
@@ -1218,6 +1417,7 @@ fn item_details_from_view(view: CipherView, include_secrets: bool) -> ItemDetail
         favorite: view.favorite,
         has_password: login.and_then(|login| login.password.as_ref()).is_some(),
         has_totp: login.and_then(|login| login.totp.as_ref()).is_some(),
+        passkeys,
         has_card_number: card
             .and_then(|card| card.number.as_ref())
             .is_some_and(|number| !number.is_empty()),
@@ -1373,7 +1573,7 @@ fn touch(session: &Session) {
 fn to_vault_item(view: bitwarden_vault::CipherListView, icon_base_url: &str) -> Option<VaultItem> {
     let deleted = view.deleted_date.is_some();
     let id = view.id?.to_string();
-    let (has_username, has_password, has_totp, icon_url) = match &view.r#type {
+    let (has_username, has_password, has_totp, has_passkey, icon_url) = match &view.r#type {
         CipherListViewType::Login(login) => (
             login
                 .username
@@ -1384,6 +1584,7 @@ fn to_vault_item(view: bitwarden_vault::CipherListView, icon_base_url: &str) -> 
             // the selected item.
             false,
             login.totp.is_some(),
+            login.has_fido2,
             login.uris.as_ref().and_then(|uris| {
                 uris.iter()
                     .find_map(|uri| uri.uri.as_deref().and_then(website_hostname))
@@ -1391,7 +1592,7 @@ fn to_vault_item(view: bitwarden_vault::CipherListView, icon_base_url: &str) -> 
                     .map(|host| format!("{}/{host}/icon.png", icon_base_url.trim_end_matches('/')))
             }),
         ),
-        _ => (false, false, false, None),
+        _ => (false, false, false, false, None),
     };
     let folder_id = view.folder_id.map(|id| id.to_string());
     Some(VaultItem {
@@ -1403,6 +1604,7 @@ fn to_vault_item(view: bitwarden_vault::CipherListView, icon_base_url: &str) -> 
         has_username,
         has_password,
         has_totp,
+        has_passkey,
         icon_url,
         folder_id,
         deleted,
@@ -1498,6 +1700,24 @@ pub(crate) fn login_configuration(
     settings.api_url = environment.api;
     settings.identity_url = environment.identity;
     Ok((settings, environment.icons.unwrap_or_default()))
+}
+
+fn notification_hub_url(request: &LoginRequest) -> Result<Option<String>, String> {
+    let base = match request.region.as_str() {
+        "us" => Some("https://notifications.bitwarden.com".to_owned()),
+        "eu" => Some("https://notifications.bitwarden.eu".to_owned()),
+        "self-hosted" => {
+            request
+                .server_config
+                .as_ref()
+                .cloned()
+                .unwrap_or_default()
+                .resolve(request.server_url.as_deref())?
+                .notifications
+        }
+        _ => return Err("Choose a supported Bitwarden region.".into()),
+    };
+    Ok(base.map(|base| format!("{}/hub", base.trim_end_matches('/'))))
 }
 
 fn settings_for(region: &str, custom_server: Option<&str>) -> Result<ClientSettings, String> {
@@ -1823,5 +2043,41 @@ mod tests {
         );
         tokio::task::yield_now().await;
         assert!(dropped.load(std::sync::atomic::Ordering::SeqCst));
+    }
+    #[test]
+    fn device_login_requests_expire_after_fifteen_minutes() {
+        let recent = (Utc::now() - chrono::TimeDelta::minutes(14)).to_rfc3339();
+        let expired = (Utc::now() - chrono::TimeDelta::minutes(16)).to_rfc3339();
+        assert!(auth_request_is_fresh(Some(&recent)));
+        assert!(!auth_request_is_fresh(Some(&expired)));
+        assert!(auth_request_is_fresh(Some("server-specific-date")));
+        assert!(auth_request_is_fresh(None));
+    }
+    #[test]
+    fn notification_hubs_follow_account_environment() {
+        let request = |region: &str, server_url: Option<&str>| LoginRequest {
+            region: region.into(),
+            server_url: server_url.map(str::to_owned),
+            server_config: None,
+            email: "test@example.invalid".into(),
+        };
+        assert_eq!(
+            notification_hub_url(&request("us", None))
+                .unwrap()
+                .as_deref(),
+            Some("https://notifications.bitwarden.com/hub")
+        );
+        assert_eq!(
+            notification_hub_url(&request("eu", None))
+                .unwrap()
+                .as_deref(),
+            Some("https://notifications.bitwarden.eu/hub")
+        );
+        assert_eq!(
+            notification_hub_url(&request("self-hosted", Some("https://vault.example.test")))
+                .unwrap()
+                .as_deref(),
+            Some("https://vault.example.test/notifications/hub")
+        );
     }
 }

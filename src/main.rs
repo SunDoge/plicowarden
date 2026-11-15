@@ -58,6 +58,7 @@ fn main() -> Result<(), Error> {
     }
     let (desktop, tray) = plicowarden::desktop::integration();
     let host = Host::new(Warden::default(), true).with_desktop(desktop);
+    let window_options = plicowarden::display::window_options(host.app.custom_titlebar);
     let zoom = host.app.zoom.clone();
     // The engine's persisted-state file (login email, region, self-hosted
     // server) under the same data directory as the appearance settings.
@@ -75,7 +76,7 @@ fn main() -> Result<(), Error> {
             Box::new(plico_runtime::Source::new(host)),
             zoom,
         ),
-        plicowarden::display::window_options(cfg!(target_os = "macos")),
+        window_options,
         extensions,
     )
     .map(|_| ())

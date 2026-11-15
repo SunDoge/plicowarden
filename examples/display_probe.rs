@@ -1,5 +1,6 @@
 //! Synthetic density/Retina probe; never starts an account or preferences worker.
-use plico_runtime::{NativeApp, Source, ZoomSource};
+use plico_desktop::NativeApp;
+use plico_runtime::{Source, ZoomSource};
 use plicowarden::Warden;
 use snafu::{ResultExt, Snafu};
 use std::path::PathBuf;
