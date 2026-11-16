@@ -1,12 +1,11 @@
 //! Native SSH agent boundary. Only public metadata reaches UI; secrets stay in
 //! the vault actor. No private-key cache, serde or debug logging in this module.
 use signature::{RandomizedSigner, SignatureEncoding, Signer};
+use ssh_agent_lib::proto::{Identity, PublicCredential, SignRequest};
 pub use ssh_agent_lib::ssh_key;
+#[cfg(unix)]
 use ssh_agent_lib::{
-    proto::{
-        Identity, PublicCredential, SignRequest,
-        message::{Request, Response},
-    },
+    proto::message::{Request, Response},
     ssh_encoding::{Decode, Encode},
 };
 use ssh_key::{Algorithm, HashAlg, PrivateKey, PublicKey, Signature};
@@ -14,14 +13,17 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
+#[cfg(unix)]
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
     sync::{mpsc, oneshot, watch},
     task::JoinHandle,
 };
+#[cfg(unix)]
 use zeroize::Zeroizing;
 
 pub const APPROVAL_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(unix)]
 const MAX_PACKET: usize = 256 * 1024;
 const MAX_PENDING: usize = 16;
 /// Most recent signing requests retained for the access history.
@@ -133,14 +135,25 @@ pub struct Call {
 }
 #[derive(Clone)]
 pub struct Endpoint {
+    #[cfg(unix)]
     tx: mpsc::Sender<Call>,
+    #[cfg(unix)]
     gate: Gate,
 }
 impl Endpoint {
     pub fn channel(gate: Gate) -> (Self, mpsc::Receiver<Call>) {
         let (tx, rx) = mpsc::channel(MAX_PENDING);
-        (Self { tx, gate }, rx)
+        #[cfg(unix)]
+        let endpoint = Self { tx, gate };
+        #[cfg(not(unix))]
+        let endpoint = {
+            drop(tx);
+            drop(gate);
+            Self {}
+        };
+        (endpoint, rx)
     }
+    #[cfg(unix)]
     async fn request(&self, operation: Operation, process_id: Option<u32>) -> Result<Answer, ()> {
         let mut access = self.gate.0.subscribe();
         let state = *access.borrow_and_update();
