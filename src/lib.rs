@@ -462,7 +462,7 @@ fn synthetic_card_details() -> plicowarden_sdk::service::ItemDetails {
     detail.username = None;
     detail.password = None;
     detail.uris = Vec::new();
-    detail.cardholder_name = Some("Alex Chen".into());
+    detail.cardholder_name = Some("Demo User".into());
     detail.card_brand = Some("American Express".into());
     detail.card_number = Some("3782 822463 10005".into());
     detail.card_exp_month = Some("12".into());
@@ -481,14 +481,14 @@ fn synthetic_ssh_details() -> plicowarden_sdk::service::ItemDetails {
     detail.id = "ssh".into();
     detail.name = "Studio workstation".into();
     detail.kind = "ssh-key";
-    detail.username = Some("alex@studio".into());
+    detail.username = Some("demo@studio".into());
     detail.password = None;
     detail.uris = Vec::new();
     detail.folder_id = None;
     detail.has_password = false;
     detail.has_totp = false;
     detail.ssh_public_key =
-        Some("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForPreviewOnly alex@studio".into());
+        Some("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyForPreviewOnly demo@studio".into());
     detail.ssh_fingerprint = Some("SHA256:8f3Jc1n0YpQ2r5s7t9uVwXyZaBcDeFgHiJkLmNoPqRs".into());
     detail.has_private_key = true;
     detail
@@ -500,7 +500,7 @@ fn synthetic_totp_details() -> plicowarden_sdk::service::ItemDetails {
     detail.name = "GitHub".into();
     detail.kind = "login";
     detail.has_totp = true;
-    detail.totp = Some("otpauth://totp/GitHub:alexchen?secret=PREVIEW".into());
+    detail.totp = Some("otpauth://totp/GitHub:demo?secret=PREVIEW".into());
     detail
 }
 

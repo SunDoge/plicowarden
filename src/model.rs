@@ -27,7 +27,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "airbnb",
             "Airbnb",
-            "alex.chen@example.com",
+            "hello@example.com",
             "airbnb.com",
             "A",
             0xe85a6b,
@@ -45,8 +45,8 @@ pub fn demo_items() -> Vec<Item> {
             "note",
         ),
         (
-            "alex",
-            "Alex Chen",
+            "identity",
+            "Demo User",
             "Personal identity",
             "",
             "A",
@@ -57,7 +57,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "aliexpress",
             "AliExpress",
-            "alex.chen@example.com",
+            "hello@example.com",
             "aliexpress.com",
             "Ali",
             0xf86734,
@@ -67,7 +67,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "amazon",
             "Amazon",
-            "alex.chen@example.com",
+            "hello@example.com",
             "amazon.com",
             "a",
             0xe89d35,
@@ -77,7 +77,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "amex",
             "American Express",
-            "alexchen88",
+            "demo-card",
             "americanexpress.com",
             "AM",
             0x2462a1,
@@ -87,7 +87,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "apple",
             "Apple account",
-            "alex.chen@example.com",
+            "hello@example.com",
             "apple.com",
             "A",
             0x353844,
@@ -97,7 +97,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "figma",
             "Figma",
-            "alex.chen@example.com",
+            "hello@example.com",
             "figma.com",
             "F",
             0x9f64df,
@@ -107,7 +107,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "github",
             "GitHub",
-            "alexchen",
+            "demo",
             "github.com",
             "G",
             0x24262c,
@@ -117,7 +117,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "linear",
             "Linear",
-            "alex.chen@example.com",
+            "hello@example.com",
             "linear.app",
             "L",
             0x6761d9,
@@ -127,7 +127,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "notion",
             "Notion",
-            "alex.chen@example.com",
+            "hello@example.com",
             "notion.so",
             "N",
             0x26262b,
@@ -137,7 +137,7 @@ pub fn demo_items() -> Vec<Item> {
         (
             "ssh",
             "Studio workstation",
-            "alex@studio",
+            "demo@studio",
             "",
             ">_",
             0x4c7769,

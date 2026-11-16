@@ -1166,7 +1166,7 @@ impl Warden {
                     column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
                         text(
                             ui,
-                            if self.authenticated { &self.account_email } else { "alex@example.com" },
+                            if self.authenticated { &self.account_email } else { "hello@example.com" },
                         ).font_size(13).weight(600).width_percent(100.).ellipsis(true);
                         let status = if self.offline {
                             "Cached vault".to_owned()
@@ -1680,7 +1680,7 @@ impl Warden {
     #[rustfmt::skip]
     fn account_settings(&mut self, ui: &mut UiContext) {
         let email = if self.account_email.is_empty() {
-            "alex@example.com".to_owned()
+            "hello@example.com".to_owned()
         } else {
             self.account_email.clone()
         };
