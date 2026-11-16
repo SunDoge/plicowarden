@@ -3,7 +3,7 @@ use crate::{
     model::{AppNotification, HostCommand, Item, NotificationKind, Page, Warden},
 };
 use plico::prelude::*;
-use plico::{BoxShadow, Layout, LiquidGlass, SvgAsset};
+use plico::{BoxShadow, Layout, LiquidGlass};
 use plicowarden_sdk::{
     Request,
     ssh_agent::{AccessRecord, Outcome},
@@ -198,21 +198,18 @@ pub fn brand(ui: &mut UiContext, item: &Item, size: f32) {
         .background(Color::Panel).border(1., Color::Literal(0xeae9ee)).elevation(Elevation::SUBTLE)
         .align(Align::Center).justify(Justify::Center) + |ui|
     {
-        let asset = match item.id.as_str() {
-            "airbnb" => Some(SvgAsset::new(include_str!("../assets/airbnb.svg"))),
-            "apple" => Some(SvgAsset::new(include_str!("../assets/apple.svg"))),
-            "figma" => Some(SvgAsset::new(include_str!("../assets/figma.svg"))),
-            "github" => Some(SvgAsset::new(include_str!("../assets/github.svg"))),
-            "linear" => Some(SvgAsset::new(include_str!("../assets/linear.svg"))),
-            "notion" => Some(SvgAsset::new(include_str!("../assets/notion.svg"))),
-            _ => None,
-        };
         if let Some(icon) = &item.icon {
             image(ui, icon).size(size * 0.7, size * 0.7);
-        } else if let Some(asset) = asset {
-            svg(ui, &asset).size(size * 0.62, size * 0.62).color(Color::Literal(item.color));
         } else {
-            text(ui, &item.mark).font_size((size * 0.42) as u16).weight(700).color(Color::Literal(item.color));
+            let fallback = match item.kind.as_str() {
+                "login" => "globe",
+                "card" => "card",
+                "identity" => "person",
+                "note" => "note",
+                "ssh-key" => "terminal",
+                _ => "key",
+            };
+            glyph(ui, fallback, size * 0.48, Color::Literal(item.color));
         }
     };
 }
@@ -594,10 +591,15 @@ impl Warden {
                             if toolbar_tool(ui, "back", "Back", false) {
                                 self.compact_detail = false;
                             }
-                        } else if toolbar_tool(ui, "sidebar", "Toggle sidebar", false) {
+                        } else if toolbar_tool(ui, "sidebar-open", "Toggle sidebar", false) {
                             self.compact_sidebar = true;
                         }
-                    } else if toolbar_tool(ui, "sidebar", "Toggle sidebar", false) {
+                    } else if toolbar_tool(
+                        ui,
+                        if self.sidebar { "sidebar-close" } else { "sidebar-open" },
+                        "Toggle sidebar",
+                        false,
+                    ) {
                         self.sidebar = !self.sidebar;
                     }
                     self.window_drag_region(ui, true);
@@ -676,7 +678,10 @@ impl Warden {
                             let visibility = ui.animate(
                                 "vault.sidebar.visibility",
                                 target,
-                                std::time::Duration::from_millis(180),
+                                // Match MyGO's sidebar cadence. With the same cubic
+                                // ease-out curve, 180 ms front-loads about 70% of the
+                                // travel into the first 60 ms and looks like a jump.
+                                std::time::Duration::from_millis(250),
                             );
                             if visibility > f32::EPSILON {
                                 // Animate the participating width and slide a fixed-width panel

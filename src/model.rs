@@ -151,7 +151,8 @@ pub fn demo_items() -> Vec<Item> {
         name: name.into(),
         user: user.into(),
         site: site.into(),
-        icon_url: None,
+        icon_url: (kind == "login" && !site.is_empty())
+            .then(|| format!("https://icons.bitwarden.net/{site}/icon.png")),
         icon: None,
         mark: mark.into(),
         color,

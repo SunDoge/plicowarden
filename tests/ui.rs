@@ -753,6 +753,10 @@ fn desktop_sidebar_animates_layout_width_and_retains_its_exit() {
     let closed_detail_width = detail_width(&ui);
     assert!(closed_x < closing_x);
     assert!(
+        open_x - closing_x < (open_x - closed_x) * 0.65,
+        "the first 60 ms must not consume most of the sidebar travel"
+    );
+    assert!(
         open_detail_width < closing_detail_width && closing_detail_width < closed_detail_width,
         "detail width must follow the animated sidebar width: open={open_detail_width}, \
          moving={closing_detail_width}, closed={closed_detail_width}"
@@ -1185,6 +1189,27 @@ fn downloaded_site_icon_is_declared_as_an_image_in_list_and_details() {
             .count()
             >= 2
     );
+}
+
+#[test]
+fn demo_logins_use_the_bitwarden_icon_service() {
+    for item in plicowarden::model::demo_items() {
+        if item.kind == "login" {
+            let expected = format!("https://icons.bitwarden.net/{}/icon.png", item.site);
+            assert_eq!(
+                item.icon_url.as_deref(),
+                Some(expected.as_str()),
+                "{} should use the same favicon path as a real vault login",
+                item.name
+            );
+        } else {
+            assert!(
+                item.icon_url.is_none(),
+                "{} is not a website login",
+                item.name
+            );
+        }
+    }
 }
 
 #[test]

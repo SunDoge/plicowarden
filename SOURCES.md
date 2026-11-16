@@ -12,7 +12,6 @@ crates remain Apache-2.0 and do not depend on this application.
 - Original SDK adaptation: Warden Desktop
   `43f390e7a800845c66872df377767ab57f7c67b6`. Official Bitwarden SDK pinned to
   `fbd21679c1c3690cba424ad3dbb0ba662eb9863e`.
-- Brand SVGs: Simple Icons 16.0.0, CC0 (asset notice included), via C# Warden.
 All reused files are local copies, with no dependency on the original checkouts.
 
 ## Reference snapshot SHA-256

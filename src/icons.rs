@@ -25,6 +25,8 @@ pub fn get(name: &str) -> &'static SvgAsset {
         "lock" => &lucide_icons::LOCK,
         "plus" => &lucide_icons::PLUS,
         "sidebar" => &lucide_icons::PANEL_LEFT,
+        "sidebar-close" => &lucide_icons::PANEL_LEFT_CLOSE,
+        "sidebar-open" => &lucide_icons::PANEL_LEFT_OPEN,
         "chevron" => &lucide_icons::CHEVRON_RIGHT,
         "chevron-down" => &lucide_icons::CHEVRON_DOWN,
         "bell" => &lucide_icons::BELL,
