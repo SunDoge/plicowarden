@@ -1,8 +1,12 @@
 # TypeScript recipe 开发循环
 
-当前已实现：TypeScript 组合 fixture 和交互 → 生成版本化 JSON 计划 → Rust 批量执行。
+当前已实现：TypeScript 组合视觉 fixture 和交互 → 生成版本化 JSON 计划 → Rust 批量截图。
 不需要 C#、嵌入式 JS 引擎、动态库或应用状态反射。普通运行的 App 不要求序列化。
-已有 `PreviewScenario` JSON 和 `plico capture` 保持原来的接口；测试计划是独立协议。
+已有 `PreviewScenario` JSON 和 `plico capture` 保持原来的接口；recipe 计划是独立协议。
+
+Recipe 不再作为第二套功能测试框架：状态转换、输入、时序、服务边界和回归断言放在 Rust
+单元／集成测试中。默认 recipe 只保留九条有视觉价值的旅程，用少量语义断言确认已经到达
+截图位置。专项 review suite 可以继续覆盖 transfer、bulk、security 等人工验收表面。
 
 ## 运行
 
@@ -42,7 +46,7 @@ target/debug/examples/recipes --plan reports/recipes/plan.json --output reports/
 
 ## 公共状态与流程
 
-Warden 的实际套件在 `recipes/suite.ts`，公共状态在 `fixtures/vault.ts`，
+Warden 的默认视觉套件在 `recipes/suite.ts`，公共状态在 `fixtures/vault.ts`，
 公共搜索流程在 `flows/search.ts`。每次 fixture 调用都返回新对象，套件展开时再次复制，
 运行时每例创建全新 App、Source、输入上下文和 VirtualClock；共享 renderer 与字体/GPU 缓存。
 
@@ -76,8 +80,9 @@ fixture、主题和窗口参数是显式测试输入，不是任意写入活跃�
 - `fill(label, text)`：原生焦点、平台 Select All、Backspace、文本输入，既支持替换也支持清空。
 - `typeText`、`key`、`setValue`：对应现有 runtime 命令。
 - `advance(ms)`：推进虚拟时钟，不睡眠、不自动模拟中间 vsync。
-- `expect(selector)`：exists、absent、count、enabled、value、selected。
-- `expectText(text)`：检查最终声明/布局中的精确文字，不要求该文字有交互语义标签。
+- `expect(selector)`：视觉流程的 waypoint，支持 exists、absent、count、enabled、value、selected；
+  完整行为断言属于 Rust 测试。
+- `expectText(text)`：确认截图前已到达目标状态，不替代状态级断言。
 - `capture(name)`：捕获当前流程状态，允许一例多个命名截图。
 - `event(value)`：交给应用自己的 synthetic host/service 处理函数。
 
@@ -146,7 +151,8 @@ GPU 测试验证连续交互的多个截图不同、失败截图保存当前状�
 | 仅语义 | 0.197 s | 0.091 s | 0.280 s | 0.595 s |
 | 断言 + 截图 | 0.194 s | 0.091 s | 1.256 s | 1.579 s |
 
-同一套七例，视觉模式每轮 14 个截图点；五轮 PNG 的 SHA-256 全部一致。
+这组数据来自早期七例／14 截图基线；当前九条默认视觉旅程不沿用这些绝对耗时作为性能门槛。
+当时五轮 PNG 的 SHA-256 全部一致。
 视觉模式的步骤断言和截图在同一条交互中执行，不再像早期 probe 那样分别重放。
 这是热环境、固定合成数据和固定字体的本机结果；不含 Rust 构建，不是首次依赖安装时间。
 
@@ -155,4 +161,4 @@ GPU 测试验证连续交互的多个截图不同、失败截图保存当前状�
 尚未实现按源码依赖选择用例、图片 baseline 管理、常驻 IPC、自动等待真实服务、
 可序列化的运行中 App 快照、生成 UI 的任意随机源控制，或 TS 读取 UI 后实时分支。
 目前 fixture + 输入 + 虚拟时间覆盖的固定流程可重放；用到随机生成器时仍需应用单独注入确定性随机源。
-保持这条主线，先从真实案例提炼新操作，避免预先扩展成完整脚本运行时。
+保持视觉编排这条主线，避免再扩展成与 Rust `Tester` 重叠的完整脚本测试运行时。

@@ -167,9 +167,10 @@ instead of leaving a blank lower half.
 - `cargo test --locked --workspace` covers layout bounds, semantics, input
   focus, native preferences and the existing feature suite.
 - `cargo clippy --locked --workspace --all-targets -- -D warnings`.
-- `python3 scripts/run-recipes.py --suite recipes/suite.ts` renders the vault,
-  search, settings, editor, login, transfer and SSH surfaces with synthetic
-  data.
+- `python3 scripts/run-recipes.py --suite recipes/suite.ts` renders the default
+  search, motion, settings, palette, folder, login, editor and titlebar visual
+  journey with synthetic data. Dedicated review suites cover transfer, bulk and
+  security surfaces; Rust tests own their behavior assertions.
 
 The reduced-transparency test asserts zero shader declarations; the ordinary
 render test asserts that the pastel wash is present. Screenshots
