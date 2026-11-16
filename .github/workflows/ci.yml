@@ -77,7 +77,9 @@ jobs:
           target: x86_64-pc-windows-msvc
           cache-key: ci-windows-v1
           cache-workspace-crates: true
-          cache-on-failure: false
+          # A test failure happens after an expensive full Windows compile.
+          # Keep that cache on main so the corrective run does not rebuild it.
+          cache-on-failure: true
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Test Windows workspace
         run: cargo test --locked --workspace --target x86_64-pc-windows-msvc

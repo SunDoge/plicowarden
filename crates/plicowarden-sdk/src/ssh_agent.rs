@@ -137,6 +137,11 @@ pub struct Call {
 pub struct Endpoint {
     #[cfg(unix)]
     tx: mpsc::Sender<Call>,
+    // Keep the broker receiver connected on platforms without a native SSH
+    // socket. Dropping the last sender would terminate the account worker's
+    // select loop, which also owns every non-SSH account request.
+    #[cfg(not(unix))]
+    _tx: mpsc::Sender<Call>,
     #[cfg(unix)]
     gate: Gate,
 }
@@ -147,9 +152,8 @@ impl Endpoint {
         let endpoint = Self { tx, gate };
         #[cfg(not(unix))]
         let endpoint = {
-            drop(tx);
             drop(gate);
-            Self {}
+            Self { _tx: tx }
         };
         (endpoint, rx)
     }
@@ -583,5 +587,19 @@ impl Broker {
             self.note(record.clone());
         }
         closed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_keeps_the_broker_channel_connected() {
+        let (_endpoint, mut incoming) = Endpoint::channel(Gate::new(1));
+        assert!(matches!(
+            incoming.try_recv(),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+        ));
     }
 }
