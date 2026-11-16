@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "viewport": {
+    "width": 1440,
+    "height": 1000,
+    "scale": 1.0
+  },
+  "state": {
+    "screen": "vault"
+  },
+  "steps": [
+    {
+      "command": {
+        "action": "focus",
+        "role": "textbox",
+        "label": "Search all vaults"
+      }
+    },
+    {
+      "command": {
+        "action": "text",
+        "text": "github"
+      }
+    }
+  ],
+  "time_ms": 200
+}

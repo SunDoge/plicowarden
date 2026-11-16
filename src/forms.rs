@@ -1,0 +1,1119 @@
+use crate::{
+    model::{Editor, Page, Warden, factor_id, multiline_field, secret_field},
+    ui::*,
+};
+use plico::prelude::*;
+use plicowarden_sdk::Request;
+use zeroize::Zeroizing;
+
+#[component]
+pub fn picker(
+    ui: &mut UiContext,
+    label: &str,
+    value: &mut String,
+    popup: &mut PopoverState,
+    entries: &[(String, String)],
+) {
+    let options: Vec<_> = entries
+        .iter()
+        .map(|(value, label)| {
+            SelectOption::new(
+                crate::model::business_key(value),
+                value.clone(),
+                label.as_str(),
+            )
+        })
+        .collect();
+    select(ui, popup, label, value, &options).width(260.);
+}
+#[component]
+#[rustfmt::skip]
+fn region_selector(ui: &mut UiContext, selected: &mut usize, disabled: bool) {
+    row(ui).gap(2).padding(4).radius(8.).background(Color::Control) + |ui| {
+        for (index, label) in ["Self-hosted", "Bitwarden US", "Bitwarden EU"].iter().enumerate()
+        {
+            ui.keyed(index as u64, |ui| {
+                let control = button(ui).text(*label).height(30.).padding_x(8).radius(6.).font_size(13);
+                let control = if *selected == index {
+                    control.background(Color::Panel).border(1., EDGE)
+                } else {
+                    control.ghost()
+                };
+                if control.disabled(disabled).clicked() {
+                    *selected = index;
+                }
+            });
+        }
+    };
+}
+
+fn compact_server_target(value: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        return "Choose a server".into();
+    }
+    plicowarden_sdk::server::validate_url(value)
+        .unwrap_or_else(|_| value.trim_end_matches('/').to_owned())
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_owned()
+}
+
+#[component]
+#[rustfmt::skip]
+fn login_server_identity(
+    ui: &mut UiContext,
+    target: &str,
+    description: &str,
+    disabled: bool,
+) -> bool {
+    let mut change = false;
+    surface(ui).width_percent(100.).padding_x(12).padding_y(9).gap(10)
+        .radius(11.).border(1., EDGE).background(Color::Control) + |ui| {
+        row(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
+            column(ui).width(30.).height(30.).shrink(0.).radius(9.)
+                .align(Align::Center).justify(Justify::Center)
+                .background(Color::Panel).border(1., EDGE) + |ui| {
+                glyph(ui, "globe", 15., Color::Accent);
+            };
+            column(ui).width(0.).grow(1.).min_width(0.).gap(2) + |ui| {
+                text(ui, target).font_size(13).weight(650).color(INK)
+                    .width_percent(100.).ellipsis(true);
+                text(ui, description).font_size(11).color(MUTED)
+                    .width_percent(100.).ellipsis(true);
+            };
+            if button(ui).text("Change server").ghost().height(28.).padding_x(8)
+                .disabled(disabled).clicked()
+            {
+                change = true;
+            }
+        };
+    };
+    change
+}
+fn entries(values: &[(&str, &str)]) -> Vec<(String, String)> {
+    values
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect()
+}
+#[component]
+#[rustfmt::skip]
+fn edit_field(ui: &mut UiContext, draft: &mut Editor, key: &str, label: &str) {
+    let secret = secret_field(key);
+    let multiline = multiline_field(key);
+    let buffer = draft.buffer(key, secret, multiline);
+    column(ui).width_percent(100.).gap(7) + |ui| {
+        text(ui, label).font_size(12).weight(600).color(MUTED);
+        let hint = match key {
+            "name" => "e.g. GitHub",
+            "username" => "name@example.com",
+            "password" => "Enter a password",
+            "uris" => "https://example.com",
+            "totp" => "Setup key or otpauth:// URI",
+            "notes" => "Add a note",
+            _ => "",
+        };
+        text_input(ui, label, &buffer).placeholder(hint).width_percent(100.).height(if multiline {
+            if key == "notes" || key == "privateKey" { 120. } else { 80. }
+        } else {
+            36.
+        });
+    };
+}
+pub fn kind_fields(kind: &str) -> &'static [(&'static str, &'static str)] {
+    match kind {
+        "login" => &[
+            ("username", "Username"),
+            ("password", "Password"),
+            ("uris", "Websites (one per line)"),
+            ("totp", "Authenticator key"),
+        ],
+        "card" => &[
+            ("cardholderName", "Cardholder"),
+            ("brand", "Card brand"),
+            ("number", "Card number"),
+            ("expMonth", "Expiry month"),
+            ("expYear", "Expiry year"),
+            ("code", "Security code"),
+        ],
+        "identity" => &[
+            ("title", "Title"),
+            ("firstName", "First name"),
+            ("middleName", "Middle name"),
+            ("lastName", "Last name"),
+            ("username", "Username"),
+            ("email", "Email"),
+            ("phone", "Phone"),
+            ("company", "Company"),
+            ("address1", "Address"),
+            ("address2", "Address line 2"),
+            ("address3", "Address line 3"),
+            ("city", "City"),
+            ("state", "State / province"),
+            ("postalCode", "Postal code"),
+            ("country", "Country"),
+            ("ssn", "Social security number"),
+            ("passportNumber", "Passport number"),
+            ("licenseNumber", "License number"),
+        ],
+        "ssh-key" => &[
+            ("privateKey", "OpenSSH private key"),
+            ("publicKey", "Public key"),
+            ("fingerprint", "Fingerprint"),
+        ],
+        _ => &[],
+    }
+}
+#[component]
+#[rustfmt::skip]
+fn login_brand(ui: &mut UiContext, width: f32) {
+    column(ui).width(width.clamp(280., 560.)).height_percent(100.).shrink(0.)
+        .padding_x(40.).padding_top(64.).padding_bottom(40.)
+        .justify(Justify::Center).background(Color::Panel) + |ui| {
+        glyph(ui, "shield", 44., Color::Accent);
+        column(ui).gap(4.).padding_top(28.) + |ui| {
+            text(ui, "Plicowarden").font_size(20).weight(700);
+            text(ui, "Every login,").font_size(30).weight(750);
+            text(ui, "behind one door.").font_size(30).weight(750);
+        };
+        column(ui).gap(12.).padding_top(28.) + |ui| {
+            for (icon, label) in [
+                ("lock", "Passwords and passkeys, filled in anywhere"),
+                ("clock", "One-time codes, one click away"),
+                ("terminal", "SSH keys that sign without leaving the vault"),
+            ] {
+                ui.keyed(label, |ui| {
+                    row(ui).gap(10.).align(Align::Center) + |ui| {
+                        glyph(ui, icon, 16., MUTED);
+                        text(ui, label).font_size(13).color(MUTED);
+                    };
+                });
+            }
+        };
+    };
+}
+
+impl Warden {
+    fn login_server_target(&self) -> String {
+        match self.region.as_str() {
+            "us" => "bitwarden.com".into(),
+            "eu" => "bitwarden.eu".into(),
+            _ => compact_server_target(if !self.server.trim().is_empty() {
+                &self.server
+            } else if !self.identity_url.trim().is_empty() {
+                &self.identity_url
+            } else {
+                &self.api_url
+            }),
+        }
+    }
+
+    fn login_server_description(&self) -> &'static str {
+        match self.region.as_str() {
+            "us" => "Bitwarden · United States",
+            "eu" => "Bitwarden · Europe",
+            _ if self.server.trim().is_empty() => "Self-hosted · custom endpoints",
+            _ => "Self-hosted server",
+        }
+    }
+
+    fn edit_login_server(&mut self) {
+        if self.busy {
+            return;
+        }
+        if self.login_password_step || !self.factors.is_empty() {
+            self.back_to_email();
+        }
+        self.environment_error.clear();
+        self.environment_open = true;
+    }
+
+    #[component]
+    #[rustfmt::skip]
+    pub fn account(&mut self, ui: &mut UiContext) {
+        let width = (ui.viewport_width() - 48.).clamp(240., 432.);
+        let top = if ui.viewport_size()[1] < 760. { 24 } else { 48 };
+        let focus = std::mem::take(&mut self.login_focus);
+        // Login identity persists across launches (the host's persisted
+        // state file): the remembered email, the chosen region and the
+        // self-hosted server URL with its endpoint overrides. The secret
+        // never persists - only what the user would retype anyway.
+        if !self.authenticated && !self.login_password_step && !self.adding_account {
+            let remembered_email = ui.persisted_state("login.email", String::new);
+            if self.email.is_empty() {
+                self.email = remembered_email.read().clone();
+            }
+            let region = ui.persisted_state("login.region", || "us".to_owned());
+            if self.region == "us" {
+                self.region = region.read().clone();
+            }
+            let server = ui.persisted_state("login.server", String::new);
+            if self.server.is_empty() {
+                self.server = server.read().clone();
+            }
+            let advanced_urls = ui.persisted_state("login.endpoints", || {
+                (String::new(), String::new(), String::new())
+            });
+            if self.api_url.is_empty() && self.identity_url.is_empty() && self.icons_url.is_empty() {
+                (self.api_url, self.identity_url, self.icons_url) = advanced_urls.read().clone();
+            }
+            // Persist only real changes. Writing the same value every frame
+            // rebuilds the login view and drops an input selection (Ctrl+A)
+            // between a focus and the following edit key.
+            if self.persist_login_email {
+                remembered_email.set(self.email.clone());
+                self.persist_login_email = false;
+            }
+            if self.persist_login_settings {
+                region.set(self.region.clone());
+                server.set(self.server.clone());
+                advanced_urls.set((
+                    self.api_url.clone(),
+                    self.identity_url.clone(),
+                    self.icons_url.clone(),
+                ));
+                self.persist_login_settings = false;
+            }
+        }
+        let split = ui.viewport_width() >= 900.;
+        row(ui).width_percent(100.).height_percent(100.) + |ui| {
+            if split {
+                login_brand(ui, ui.viewport_width() * 0.44);
+                column(ui).width(1.).height_percent(100.).shrink(0.)
+                    .background(Color::Literal(0xe7e4ee));
+            }
+            column(ui).position(plico::Position::Relative).width(0.).grow(1.).height_percent(100.)
+                .align(Align::Center).justify(Justify::Center).padding(24)
+                .padding_top(if split { 40. } else { top as f32 }).gap(20)
+                .background(Color::Literal(0xfbfafd)).background_alpha(if split { 1. } else { 0. })
+                .scroll_y(true) + |ui|
+            {
+                if !split {
+                    row(ui).gap(10).align(Align::Center) + |ui| {
+                        glyph(ui, "shield", 24., Color::Accent);
+                        text(ui, "Plicowarden").font_size(20).weight(700).color(INK);
+                    };
+                }
+                column(ui).width(width).gap(16).padding_bottom(24) + |ui| {
+                column(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                    glyph(ui, if self.login_password_step { "key" } else { "shield" }, 32., Color::Accent);
+                    text(
+                        ui,
+                        if !self.factors.is_empty() {
+                            "Verify your identity"
+                        } else {
+                            "Welcome back"
+                        },
+                    ).font_size(24).weight(700).color(INK);
+                    if self.login_password_step {
+                        text(ui, &self.email).font_size(14).color(MUTED);
+                    } else if self.factors.is_empty() {
+                        text(ui, "Sign in to your Plicowarden vault.").font_size(13).color(MUTED);
+                    }
+                };
+                glass_surface(ui).width_percent(100.).padding(24).gap(16) + |ui| {
+                    let server_target = self.login_server_target();
+                    let server_description = self.login_server_description();
+                    if login_server_identity(
+                        ui,
+                        &server_target,
+                        server_description,
+                        self.busy,
+                    ) {
+                        self.edit_login_server();
+                    }
+                    if self.factors.is_empty() {
+                        if !self.login_password_step {
+                            column(ui).width_percent(100.).gap(8) + |ui| {
+                                text(ui, "Email address").font_size(14).weight(600).color(INK);
+                                let submitted = text_input_string(ui, "Email address", &mut self.email)
+                                    .autofocus(true).request_focus(focus).placeholder("you@example.com")
+                                    .width_percent(100.).disabled(self.busy).response().submitted();
+                                if submitted {
+                                    self.continue_login();
+                                }
+                            };
+                            if button(ui).text("Continue").primary()
+                                .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .width_percent(100.).disabled(self.busy || self.email.trim().is_empty())
+                                .clicked()
+                            {
+                                self.continue_login();
+                            }
+                        } else {
+                            column(ui).width_percent(100.).gap(8) + |ui| {
+                                text(ui, "Master password").font_size(14).weight(600).color(INK);
+                                let mut toggle_password = false;
+                                let mut submitted = false;
+                                column(ui).position(plico::Position::Relative).width_percent(100.) + |ui| {
+                                    submitted = text_input(ui, "Master password", &self.password)
+                                        .autofocus(true).request_focus(focus)
+                                        .password_visible(self.login_show_password).width_percent(100.)
+                                        .padding_right(42.).disabled(self.busy).response().submitted();
+                                    toggle_password = (button_base(
+                                        ui,
+                                        if self.login_show_password {
+                                            "Hide master password"
+                                        } else {
+                                            "Show master password"
+                                        },
+                                    ).position(plico::Position::Absolute).inset_right(4.).inset_top(4.)
+                                        .width(28.).height(28.).padding(6.).radius(6.)
+                                        .background(Color::Panel).background_alpha(0.)
+                                        .hover_background(Color::Literal(0xeeeaf3))
+                                        .disabled(self.busy) + |ui| {
+                                        glyph(
+                                            ui,
+                                            if self.login_show_password { "eye-off" } else { "eye" },
+                                            16.,
+                                            MUTED,
+                                        );
+                                    }).response.clicked();
+                                };
+                                if toggle_password {
+                                    self.login_show_password = !self.login_show_password;
+                                    ui.request_rebuild();
+                                }
+                                if submitted {
+                                    self.login();
+                                }
+                            };
+                            if button(ui).text(if self.busy {
+                                    "Logging in…"
+                                } else if self.has_cached_account() { "Unlock" } else { "Sign in" })
+                                .primary().radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .width_percent(100.)
+                                .disabled(self.busy || self.password.is_empty()).clicked()
+                            {
+                                self.login();
+                            }
+                            if (self.has_cached_account() || !self.error.is_empty())
+                                && button(ui).text("Connect to server instead").ghost().width_percent(100.)
+                                    .disabled(self.busy || self.password.is_empty()).clicked()
+                            {
+                                self.reconnect();
+                            }
+                        }
+                    } else {
+                        let previous = self.factor.clone();
+                        let choices: Vec<_> = self.factors.iter()
+                            .map(|p| (factor_id(p.id).to_owned(), p.label.to_owned())).collect();
+                        column(ui).width_percent(100.).disabled(self.busy) + |ui| {
+                            picker(ui, "Verification method", &mut self.factor,
+                                self.popups.entry("factor".into()).or_default(), &choices);
+                        };
+                        if previous != self.factor {
+                            self.otp.clear();
+                            self.error.clear();
+                            self.notice.clear();
+                            self.login_focus = true;
+                        }
+                        let choice = self.factors.iter().find(|p| factor_id(p.id) == self.factor);
+                        let supported = choice.is_some_and(|p| p.supported);
+                        if let Some(hint) = choice.and_then(|p| p.hint.as_deref()) {
+                            text(ui, hint).font_size(13).color(MUTED).width_percent(100.);
+                        }
+                        if supported {
+                            text(ui, "Verification code").font_size(14).weight(600).color(INK);
+                            let submitted = text_input(ui, "Verification code", &self.otp)
+                                .autofocus(true).request_focus(focus).width_percent(100.)
+                                .disabled(self.busy).response().submitted();
+                            if button(ui).text(if self.busy { "Verifying…" } else { "Verify" }).primary()
+                                .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .width_percent(100.).disabled(self.busy || self.otp.is_empty()).clicked()
+                                || submitted
+                            {
+                                self.submit_verification();
+                            }
+                        } else {
+                            text(ui, "This method is not available in Plicowarden. Choose another verification method or go back.")
+                                .color(Color::Warning).width_percent(100.);
+                        }
+                        if self.factor == "email"
+                            && button(ui).icon(crate::icons::get("mail")).text("Send email code").ghost()
+                                .disabled(self.busy).clicked()
+                        {
+                            self.request(Request::SendEmail);
+                        }
+                    }
+                    self.login_progress_ui(ui);
+                    if self.busy
+                        && button(ui).icon(crate::icons::get("close")).text("Cancel sign-in").ghost()
+                            .clicked()
+                    {
+                        self.lock();
+                        self.notice = "Sign-in cancelled.".into();
+                    }
+                    if copyable_error(ui, &self.error) {
+                        self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
+                    }
+                    if !self.notice.is_empty() {
+                        text(ui, &self.notice).color(MUTED).width_percent(100.);
+                    }
+                    if (self.login_password_step || !self.factors.is_empty())
+                        && !self.busy
+                        && button(ui).text("Back").width_percent(100.)
+                            .height(32.).clicked()
+                    {
+                        self.back_to_email();
+                    }
+                };
+                if !self.login_password_step && self.factors.is_empty() && self.environment_open {
+                            glass_surface(ui).padding(20).gap(12) + |ui| {
+                                text(ui, "Server").font_size(16).weight(650);
+                                let mut region = match self.region.as_str() {
+                                    "us" => 1,
+                                    "eu" => 2,
+                                    _ => 0,
+                                };
+                                region_selector(ui, &mut region, self.busy);
+                                if self.region
+                                    != ["self-hosted", "us", "eu"][region.min(2)]
+                                {
+                                    self.environment_error.clear();
+                                }
+                                self.region = ["self-hosted", "us", "eu"]
+                                    [region.min(2)].into();
+                                if self.region == "self-hosted" {
+                                    text(ui, "Server URL").font_size(13).weight(600);
+                                    text_input_string(ui, "Server URL", &mut self.server)
+                                        .placeholder("https://vault.example.com")
+                                        .width_percent(100.).disabled(self.busy);
+                                    checkbox(ui, "Custom service endpoints", &mut self.advanced);
+                                    if self.advanced {
+                                        for (label, value) in [
+                                            ("API URL", &mut self.api_url),
+                                            (
+                                                "Identity URL",
+                                                &mut self.identity_url,
+                                            ),
+                                            ("Icons URL", &mut self.icons_url),
+                                        ] {
+                                            text(ui, label).font_size(13).color(MUTED);
+                                            text_input_string(ui, label, value)
+                                                .placeholder("Optional override").width_percent(100.)
+                                                .disabled(self.busy);
+                                        }
+                                    }
+                                }
+                                if copyable_error(ui, &self.environment_error) {
+                                    self.commands.push(
+                                        crate::model::HostCommand::CopyError(
+                                            self.environment_error.clone()),
+                                    );
+                                }
+                                if button(ui).radius(6.).icon(crate::icons::get("check")).text("Done")
+                                    .width_percent(100.).clicked()
+                                    && self.validate_login_server()
+                                {
+                                    self.persist_login_settings = true;
+                                    self.environment_open = false;
+                                }
+                            };
+                }
+                if !self.saved_accounts.is_empty()
+                    && button(ui).text("Switch account").ghost().width_percent(100.).disabled(self.busy)
+                        .clicked()
+                {
+                    self.accounts_modal.open();
+                }
+                if button(ui).icon(crate::icons::get("grid")).text("Browse demo vault").ghost()
+                    .width_percent(100.).disabled(self.busy).clicked()
+                {
+                    self.lock();
+                    self.items = crate::model::demo_items();
+                    self.selected = "github".into();
+                    self.filter = "All Items".into();
+                    self.show_vault();
+                    self.notice.clear();
+                }
+            };
+            };
+        };
+    }
+    #[component]
+    #[rustfmt::skip]
+    pub fn accounts_ui(&mut self, ui: &mut UiContext) {
+        let mut state = std::mem::take(&mut self.accounts_modal);
+        modal(ui, &mut state).title("Accounts").width(520.)
+            .material(dialog_glass()).children(|ui| {
+            text(ui, "Saved accounts stay encrypted on this device.")
+                .font_size(12).color(MUTED).width_percent(100.);
+            if self.saved_accounts.is_empty() {
+                surface(ui).padding(18.).gap(4.) + |ui| {
+                    text(ui, "No saved accounts").font_size(14).weight(600);
+                    text(ui, "Add an account to unlock it without signing in again.")
+                        .font_size(12).color(MUTED).width_percent(100.);
+                };
+            }
+            for account in self.saved_accounts.clone() {
+                let server = account.config.server_url.as_deref().unwrap_or(&account.config.region);
+                let current = self.active_account_id.as_deref() == Some(account.id.as_str());
+                let initial = account.config.email.chars().next()
+                    .map(|c| c.to_uppercase().next().unwrap_or(c)).unwrap_or('A').to_string();
+                let label = format!("Unlock account {} on {}", account.config.email, server);
+                ui.keyed(crate::model::business_key(&account.id), |ui| {
+                    row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                        if plico::widgets::nav_entry(ui, label, current)
+                            .width(0.).grow(1.).height(64.).disabled(self.busy).children(|ui| {
+                            row(ui).width_percent(100.).align(Align::Center).gap(10.) + |ui| {
+                                avatar(ui).fallback(&initial).size(32.).font_size(12)
+                                    .background(Color::Selection).color(Color::Literal(0x1d4ed8));
+                                column(ui).width(0.).grow(1.).min_width(0.).gap(3.) + |ui| {
+                                    text(ui, &account.config.email).font_size(14).weight(600).color(INK)
+                                        .width_percent(100.).ellipsis(true);
+                                    text(ui, server).font_size(12).color(MUTED).width_percent(100.)
+                                        .ellipsis(true);
+                                };
+                                if current {
+                                    row(ui).padding_x(7.).padding_y(3.).radius(10.)
+                                        .corner_smoothing(0.).border(1., Color::Border) + |ui| {
+                                        text(ui, "Current").font_size(10).weight(600).color(MUTED);
+                                    };
+                                }
+                            };
+                        }).response.clicked()
+                        {
+                            self.choose_account(&account);
+                            ui.close_modal();
+                        }
+                        if button(ui).icon(crate::icons::get("trash")).text("Forget").aria_label(format!(
+                            "Forget account {} on {}",
+                            account.config.email, server
+                        )).ghost().disabled(self.busy).clicked()
+                        {
+                            self.request(Request::ForgetAccount(account.id.clone()));
+                            ui.close_modal();
+                        }
+                    };
+                });
+            }
+            if button(ui).icon(crate::icons::get("plus")).text("Add account").width_percent(100.)
+                .disabled(self.busy).clicked()
+            {
+                self.add_account();
+                ui.close_modal();
+            }
+        });
+        self.accounts_modal = state;
+    }
+    #[component]
+    #[rustfmt::skip]
+    pub fn editor_ui(&mut self, ui: &mut UiContext) {
+        let Some(mut draft) = self.editor.take() else {
+            return;
+        };
+        let mut cancel = false;
+        let mut save = false;
+        column(ui).width_percent(100.).height_percent(100.).gap(0.) + |ui| {
+            column(ui).width_percent(100.).height(0.).grow(1.).min_height(0.).scroll_y(true)
+                .padding_bottom(20.) + |ui| {
+            column(ui).width_percent(100.).gap(16.) + |ui| {
+            row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center).gap(12) + |ui| {
+                column(ui).gap(5).width(0.).grow(1.) + |ui| {
+                    text(ui, if draft.id.is_none() { "New item" } else { "Edit item" }).font_size(26).weight(700);
+                    text(ui, "Changes are encrypted before they leave this device.").font_size(13)
+                        .color(MUTED).width_percent(100.);
+                };
+                if button(ui).icon(crate::icons::get("close")).text("Cancel editing").ghost()
+                    .disabled(self.busy).clicked()
+                {
+                    cancel = true;
+                }
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                text(ui, "Item").font_size(13).weight(650);
+                if draft.id.is_none() {
+                    let before = draft.kind.clone();
+                    picker(
+                        ui,
+                        "Item type",
+                        &mut draft.kind,
+                        self.popups.entry("kind".into()).or_default(),
+                        &entries(&[
+                            ("login", "Login"),
+                            ("note", "Secure note"),
+                            ("card", "Card"),
+                            ("identity", "Identity"),
+                            ("ssh-key", "SSH key"),
+                        ]),
+                    );
+                    if before != draft.kind {
+                        draft.fields.retain(|k, _| k == "name" || k == "notes");
+                    }
+                }
+                ui.keyed("name", |ui| edit_field(ui, &mut draft, "name", "Item name"));
+                row(ui).gap(12).width_percent(100.).align(Align::Center) + |ui| {
+                    checkbox(ui, "Favorite", &mut draft.favorite);
+                    let mut folders = vec![(String::new(), "No folder".into())];
+                    folders.extend(self.folders.iter().map(|f| (f.id.clone(), f.name.clone())));
+                    picker(ui, "Folder", &mut draft.folder, self.popups.entry("folder".into()).or_default(),
+                        &folders);
+                };
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                text(ui, "Fields").font_size(13).weight(650);
+                for &(key, label) in kind_fields(&draft.kind) {
+                    ui.keyed(key, |ui| edit_field(ui, &mut draft, key, label));
+                }
+                if draft.kind == "login"
+                    && button(ui).icon(crate::icons::get("sync")).text("Generate a strong password").ghost()
+                        .disabled(self.busy).clicked()
+                {
+                    match crate::generator::generate(24, true) {
+                        Ok(value) => draft.buffer("password", true, false).set(value),
+                        Err(error) => self.error = error.to_string(),
+                    }
+                }
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                text(ui, "Notes").font_size(13).weight(650);
+                ui.keyed("notes", |ui| edit_field(ui, &mut draft, "notes", "Notes"));
+            };
+            surface(ui).padding(18.).gap(12.) + |ui| {
+                row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center) + |ui| {
+                    text(ui, "Custom fields").font_size(13).weight(650);
+                    if button(ui).icon(crate::icons::get("plus")).text("Add custom field").ghost().clicked() {
+                        draft.custom.push(plicowarden_sdk::FieldView {
+                            name: Some(String::new()),
+                            value: Some(String::new()),
+                            r#type: plicowarden_sdk::FieldType::Text,
+                            linked_id: None,
+                        });
+                        draft.custom_keys.push(draft.next_custom_key);
+                        draft.next_custom_key += 1;
+                    }
+                };
+                let mut remove = None;
+                for (index, field) in draft.custom.iter_mut().enumerate() {
+                    let key = draft.custom_keys[index];
+                    ui.keyed(key, |ui| {
+                        // Linked fields must survive untouched; they are not free-form text.
+                        let kind = serde_json::to_value(field.r#type).ok().and_then(|v| v.as_u64()).unwrap_or(0);
+                        if kind == 3 {
+                            text(ui, field.name.as_deref().unwrap_or("Linked field")).color(MUTED);
+                            return;
+                        }
+                        row(ui).width_percent(100.).gap(8).wrap(true).align(Align::Center) + |ui| {
+                            let name = field.name.get_or_insert_with(String::new);
+                            text_input_string(ui, "Field name", name).width(160.).grow(1.);
+                            let value = field.value.get_or_insert_with(String::new);
+                            if kind == 1 {
+                                let buffer =
+                                    draft.custom_buffers.entry(key).or_insert_with(|| {
+                                        let buffer = plico::TextBuffer::secret();
+                                        buffer.set(Zeroizing::new(value.clone()));
+                                        buffer
+                                    });
+                                text_input(ui, "Field value", buffer).width(180.).grow(1.);
+                                *value = buffer.with_value(str::to_owned);
+                            } else {
+                                text_input_string(ui, "Field value", value).width(180.).grow(1.);
+                            }
+                            let mut selected = kind.to_string();
+                            picker(ui, "Field type", &mut selected,
+                                self.popups.entry(format!("field-{key}")).or_default(),
+                                &entries(&[("0", "Text"), ("1", "Hidden"), ("2", "Boolean")]));
+                            if let Some(kind) = selected.parse::<u8>().ok()
+                                .and_then(|n| plicowarden_sdk::FieldType::try_from(n).ok())
+                            {
+                                if field.r#type != kind {
+                                    draft.custom_buffers.remove(&key);
+                                }
+                                field.r#type = kind;
+                            }
+                            if button(ui).icon(crate::icons::get("close")).text("Remove field").ghost().clicked() {
+                                remove = Some(index);
+                            }
+                        };
+                    });
+                }
+                if let Some(index) = remove {
+                    draft.custom.remove(index);
+                    let key = draft.custom_keys.remove(index);
+                    if let Some(buffer) = draft.custom_buffers.remove(&key) {
+                        buffer.clear();
+                    }
+                }
+            };
+            };
+            };
+            surface(ui).width_percent(100.).padding(12.).gap(10.) + |ui| {
+                let empty = draft.fields.get("name").is_none_or(|b| b.with_value(|s| s.trim().is_empty()));
+                row(ui).width_percent(100.).justify(Justify::SpaceBetween).align(Align::Center).gap(10.) + |ui| {
+                    text(ui, if self.busy { "Saving…" } else { "" })
+                        .font_size(12).color(MUTED);
+                    if button(ui).icon(crate::icons::get("save")).text("Save item").primary()
+                        .disabled(self.busy || empty || !self.authenticated).clicked()
+                    {
+                        save = true;
+                    }
+                };
+            };
+        };
+        if !cancel {
+            self.editor = Some(draft);
+        }
+        if save {
+            self.save_editor();
+        }
+    }
+    #[component]
+    #[rustfmt::skip]
+    pub fn move_dialog(&mut self, ui: &mut UiContext) {
+        let mut state = std::mem::take(&mut self.move_modal);
+        let mut confirmed = false;
+        modal(ui, &mut state).title("Move to folder").width(440.)
+            .material(dialog_glass()).children(|ui| {
+            text!(
+                ui,
+                "Choose a destination for {} item{}.",
+                self.move_ids.len(),
+                if self.move_ids.len() == 1 { "" } else { "s" }
+            ).font_size(13).color(MUTED).width_percent(100.);
+            text(ui, "Destination folder").font_size(14).weight(600);
+            let mut folders = vec![(String::new(), "No folder".to_owned())];
+            folders.extend(self.folders.iter().map(|folder| (folder.id.clone(), folder.name.clone())));
+            column(ui).width_percent(100.).disabled(self.busy) + |ui| {
+                picker(ui, "Destination folder", &mut self.move_folder,
+                    self.popups.entry("move-folder".into()).or_default(), &folders);
+            };
+            if copyable_error(ui, &self.error) {
+                self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
+            }
+            row(ui).width_percent(100.).gap(10).justify(Justify::End) + |ui| {
+                if button(ui).text("Cancel").aria_label("Cancel move").ghost().radius(6.).clicked() {
+                    ui.close_modal();
+                }
+                if button(ui).text("Move").aria_label("Move selected items").icon(crate::icons::get("folder"))
+                    .primary().radius(6.).disabled(self.busy || self.move_ids.is_empty()).clicked()
+                {
+                    confirmed = true;
+                }
+            };
+        });
+        self.move_modal = state;
+        if confirmed {
+            self.move_items();
+        }
+    }
+    #[component]
+    #[rustfmt::skip]
+    pub fn folder_manager(&mut self, ui: &mut UiContext) {
+        let mut state = std::mem::take(&mut self.folders_modal);
+        modal(ui, &mut state).header(false).title("Folders").width(560.)
+            .material(dialog_glass()).children(|ui| {
+            text(ui, "Folders").font_size(24).weight(700);
+            text(ui, "Organize your personal vault. Folder names are encrypted.").width_percent(100.).color(MUTED);
+            let list_height = (self.folders.len() as f32 * 42.).clamp(42., 360.);
+            column(ui).width_percent(100.).height(list_height).scroll_y(true).gap(10) + |ui| {
+                for folder in self.folders.clone() {
+                    ui.keyed(crate::model::business_key(&folder.id), |ui| {
+                        row(ui).width_percent(100.).gap(8).align(Align::Center) + |ui| {
+                            let value = self.folder_names.entry(folder.id.clone())
+                                .or_insert_with(|| folder.name.clone());
+                            text_input_string(ui, "Folder name", value).width(0.).grow(1.)
+                                .disabled(self.busy);
+                            let name = value.clone();
+                            if button(ui).icon(crate::icons::get("edit")).text("Rename").ghost().disabled(
+                                self.busy
+                                    || name.trim().is_empty()
+                                    || name.trim() == folder.name,
+                            ).clicked()
+                            {
+                                self.request(Request::Folder {
+                                    id: Some(folder.id.clone()),
+                                    name,
+                                    delete: false,
+                                });
+                            }
+                            if button(ui).icon(crate::icons::get("trash")).text("Delete folder").ghost()
+                                .disabled(self.busy).clicked()
+                            {
+                                self.ask(&folder.id, "deleteFolder");
+                                ui.close_modal();
+                            }
+                        };
+                    });
+                }
+            };
+            row(ui).width_percent(100.).gap(8) + |ui| {
+                text_input_string(ui, "New folder name", &mut self.folder_name).placeholder("New folder")
+                    .width(0.).grow(1.).disabled(self.busy);
+                if button(ui).icon(crate::icons::get("plus")).text("Create folder").primary()
+                    .disabled(self.busy || self.folder_name.trim().is_empty()).clicked()
+                {
+                    let name = std::mem::take(&mut self.folder_name);
+                    self.request(Request::Folder {
+                        id: None,
+                        name,
+                        delete: false,
+                    });
+                }
+            };
+            if copyable_error(ui, &self.error) {
+                self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
+            }
+            if button(ui).icon(crate::icons::get("check")).text("Done").ghost().disabled(self.busy).clicked() {
+                ui.close_modal();
+            }
+        });
+        self.folders_modal = state;
+    }
+    #[component]
+    #[rustfmt::skip]
+    pub fn confirm_ui(&mut self, ui: &mut UiContext) {
+        let (id, action) = self.confirm_action.clone().unwrap_or_default();
+        let mut state = std::mem::take(&mut self.confirm_modal);
+        if self.confirm_action.is_none() {
+            state.close();
+        }
+        let (title, message, label) = match action.as_str() {
+            "purge" => (
+                "Delete permanently?",
+                "This removes the encrypted item from your server. This cannot be undone.",
+                "Delete permanently",
+            ),
+            "deleteFolder" => (
+                "Delete folder?",
+                "Items will remain in your vault without this folder.",
+                "Delete folder",
+            ),
+            _ => (
+                "Move item to trash?",
+                "You can restore it from Trash later.",
+                "Move to trash",
+            ),
+        };
+        modal(ui, &mut state).title(title).width(480.)
+            .material(dialog_glass()).children(|ui| {
+            text(ui, title).font_size(24).weight(700);
+            text(ui, message).width_percent(100.).color(MUTED);
+            row(ui).width_percent(100.).justify(Justify::End).gap(10) + |ui| {
+                if button(ui).icon(crate::icons::get("close")).text("Cancel").ghost().clicked() {
+                    ui.close_modal();
+                }
+                if button(ui).icon(crate::icons::get("trash")).text(label).primary().clicked() {
+                    ui.close_modal();
+                    if action == "deleteFolder" {
+                        self.request(Request::Folder {
+                            id: Some(id.clone()),
+                            name: String::new(),
+                            delete: true,
+                        });
+                    } else {
+                        self.action(&id, &action);
+                    }
+                }
+            };
+        });
+        self.confirm_modal = state;
+    }
+}
+
+impl Warden {
+    #[component]
+    #[rustfmt::skip]
+    pub fn ssh_approval_ui(&mut self, ui: &mut UiContext) {
+        let approval = self.ssh_approvals.front().cloned();
+        let mut state = std::mem::take(&mut self.ssh_modal);
+        if approval.is_none() {
+            state.close();
+        }
+        let mut decision = None;
+        modal(ui, &mut state).title("SSH signing request").width(560.)
+            .material(dialog_glass()).children(|ui| {
+            let Some(approval) = approval.as_ref() else { return; };
+            column(ui).gap(16).width_percent(100.) + |ui| {
+                text(ui, "Allow one SSH signature?").font_size(24).weight(700).width_percent(100.);
+                text(ui, &approval.name).font_size(18).weight(600).width_percent(100.);
+                text(ui, &approval.fingerprint).font_size(13).width_percent(100.);
+                if let Some(pid) = approval.process_id {
+                    text!(ui, "Local socket peer PID: {pid}").color(MUTED).width_percent(100.);
+                }
+                text(ui, "The destination and purpose are not verified. Only allow a request you just initiated. This request expires after 30 seconds.")
+                    .color(MUTED).width_percent(100.);
+                row(ui).gap(12).justify(Justify::End).width_percent(100.) + |ui| {
+                    if button(ui).icon(crate::icons::get("close")).text("Deny SSH signature").clicked() { decision = Some(false); }
+                    if button(ui).icon(crate::icons::get("check")).text("Allow SSH signature once").primary()
+                        .disabled(self.busy).clicked() { decision = Some(true); }
+                };
+            };
+        });
+        if !state.is_open() && decision.is_none() {
+            decision = Some(false);
+        }
+        self.ssh_modal = state;
+        if let (Some(allow), Some(approval)) = (decision, approval) {
+            self.decide_ssh(approval.id, allow);
+            ui.request_rebuild();
+        }
+    }
+}
+
+impl Warden {
+    #[component]
+    #[rustfmt::skip]
+    pub fn auth_request_ui(&mut self, ui: &mut UiContext) {
+        let request = self.auth_requests.front().cloned();
+        let mut state = std::mem::take(&mut self.auth_request_modal);
+        if request.is_none() {
+            state.close();
+        }
+        let mut decision = None;
+        modal(ui, &mut state).title("Sign-in request").width(520.)
+            .material(dialog_glass()).children(|ui| {
+            let Some(request) = request.as_ref() else { return; };
+            column(ui).gap(16).width_percent(100.) + |ui| {
+                row(ui).gap(12).align(Align::Center).width_percent(100.) + |ui| {
+                    column(ui).width(38.).height(38.).shrink(0.).radius(11.)
+                        .background(Color::Control).align(Align::Center).justify(Justify::Center) + |ui| {
+                        glyph(ui, "shield", 19., Color::Accent);
+                    };
+                    column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
+                        text(ui, "Are you trying to sign in?").font_size(20).weight(700)
+                            .width_percent(100.);
+                        text!(ui, "A device wants to open {} without the master password.", self.account_email)
+                            .font_size(12).color(MUTED).width_percent(100.);
+                    };
+                };
+                column(ui).width_percent(100.).gap(0).padding(12).radius(10.)
+                    .background(Color::Control) + |ui| {
+                    approval_detail_row(ui, "Device", &request.device_type);
+                    approval_detail_row(ui, "IP address", &request.ip_address);
+                    if let Some(country) = &request.country {
+                        approval_detail_row(ui, "Location", country);
+                    }
+                    if let Some(created) = &request.created {
+                        approval_detail_row(ui, "Asked", created);
+                    }
+                    approval_detail_row(ui, "Server", &self.login_server_target());
+                };
+                column(ui).width_percent(100.).gap(6) + |ui| {
+                    text(ui, "Fingerprint phrase").font_size(11).weight(650).color(MUTED);
+                    column(ui).width_percent(100.).selectable(true) + |ui| {
+                        text(ui, &request.fingerprint).font_size(14).weight(650)
+                            .width_percent(100.);
+                    };
+                    text(ui, "Approve only if this phrase matches the one on the other device.")
+                        .font_size(11).color(MUTED).width_percent(100.);
+                };
+                row(ui).gap(10).justify(Justify::End).width_percent(100.) + |ui| {
+                    if button(ui).icon(crate::icons::get("close")).text("Deny").disabled(self.busy).clicked() {
+                        decision = Some(false);
+                    }
+                    if button(ui).icon(crate::icons::get("check")).text(if self.busy { "Answering…" } else { "Approve" })
+                        .primary().disabled(self.busy).clicked() {
+                        decision = Some(true);
+                    }
+                };
+            };
+        });
+        if !state.is_open() && decision.is_none() && !self.busy {
+            decision = Some(false);
+        }
+        self.auth_request_modal = state;
+        if let (Some(approve), Some(request)) = (decision, request) {
+            self.auth_request_modal.open();
+            self.request(Request::AnswerAuthRequest { id: request.id, approve });
+            ui.request_rebuild();
+        }
+    }
+}
+
+#[component]
+#[rustfmt::skip]
+fn approval_detail_row(ui: &mut UiContext, label: &str, value: &str) {
+    row(ui).width_percent(100.).min_height(27.).align(Align::Center).gap(12) + |ui| {
+        text(ui, label).font_size(11).color(MUTED).width(92.).shrink(0.);
+        text(ui, value).font_size(12).weight(550).width(0.).grow(1.).ellipsis(true);
+    };
+}
+
+impl Warden {
+    #[component]
+    #[rustfmt::skip]
+    pub fn login_progress_ui(&mut self, ui: &mut UiContext) {
+        if !self.login_progress.visible || self.login_progress.steps.is_empty() {
+            return;
+        }
+        let mut hide = false;
+        column(ui).width_percent(100.).gap(10).padding(12).radius(8.).background(Color::Control) + |ui| {
+            row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
+                column(ui).width(0.).grow(1.).min_width(0.).gap(2) + |ui| {
+                    text(ui, "Connection progress").font_size(13).weight(600);
+                    text!(ui, "Target · {}", self.login_server_target())
+                        .font_size(11).color(MUTED).width_percent(100.).ellipsis(true);
+                };
+                if !self.router.show(Page::Login)
+                    && button(ui).text("Hide progress").ghost().height(28.).clicked()
+                {
+                    hide = true;
+                }
+            };
+            self.progress_steps(ui);
+        };
+        if hide {
+            self.login_progress.visible = false;
+        }
+    }
+    /// The stage rows shared by the login block and the floating sync card.
+    pub fn progress_steps(&self, ui: &mut UiContext) {
+        use crate::login_progress::StepState;
+        for (index, step) in self.login_progress.steps.iter().cloned().enumerate() {
+            ui.keyed(index as u64, |ui| {
+                let color = match step.state {
+                    StepState::Complete => Color::Success,
+                    StepState::Failed => Color::Danger,
+                    _ => MUTED,
+                };
+                let _ = row(ui).width_percent(100.).gap(10).align(Align::Center)
+                    + |ui| {
+                        if step.state == StepState::Loading {
+                            spinner(ui);
+                        } else {
+                            glyph(
+                                ui,
+                                if step.state == StepState::Complete {
+                                    "check"
+                                } else if step.state == StepState::Failed {
+                                    "close"
+                                } else {
+                                    "clock"
+                                },
+                                16.,
+                                color,
+                            );
+                        }
+                        text(
+                            ui,
+                            if step.state == StepState::Loading {
+                                step.stage.label()
+                            } else {
+                                step.stage.title()
+                            },
+                        )
+                        .font_size(13)
+                        .color(color)
+                        .width(0.)
+                        .grow(1.);
+                        text(
+                            ui,
+                            match step.state {
+                                StepState::Pending => "Pending",
+                                StepState::Loading => "In progress",
+                                StepState::Complete => "Done",
+                                StepState::Failed => "Failed",
+                                StepState::Waiting => "Verification required",
+                                StepState::Paused => "Paused",
+                            },
+                        )
+                        .font_size(12)
+                        .color(color);
+                    };
+            });
+        }
+    }
+}

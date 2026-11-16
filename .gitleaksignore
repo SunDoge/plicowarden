@@ -1,0 +1,3 @@
+# Lucide provenance maps public asset names to SHA-256 digests. The generic
+# API-key rule mistakes this filename/hash pair for a credential.
+src/lucide_icons.rs.json:generic-api-key:25

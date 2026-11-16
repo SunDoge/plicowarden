@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "viewport": {
+    "width": 1440,
+    "height": 1000,
+    "scale": 1.0
+  },
+  "state": {
+    "screen": "vault"
+  },
+  "steps": [
+    {
+      "command": {
+        "action": "click",
+        "role": "button",
+        "label": "Settings"
+      }
+    }
+  ],
+  "time_ms": 200
+}

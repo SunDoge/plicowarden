@@ -1,0 +1,48 @@
+[workspace]
+pr_name = "chore: release Plicowarden{% if version %} v{{ version }}{% endif %}"
+pr_body = """
+{% for release in releases %}
+{% if release.package == "plicowarden" %}
+## Plicowarden v{{ release.next_version }}
+
+Merging this PR creates the Git tag and GitHub Release, then builds unsigned
+Linux x86_64, Windows x86_64 and macOS Universal application archives.
+{% if release.changelog %}
+
+### Changelog
+{% if release.title %}
+{{ release.title }}
+{% endif %}
+
+{{ release.changelog }}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+---
+Generated with [release-plz](https://github.com/release-plz/release-plz/).
+"""
+release = false
+publish = false
+git_only = false
+release_always = false
+semver_check = false
+dependencies_update = false
+git_tag_enable = false
+git_release_enable = false
+changelog_update = false
+
+[[package]]
+name = "plicowarden"
+release = true
+git_only = true
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+git_release_enable = true
+git_release_name = "Plicowarden v{{ version }}"
+changelog_update = true
+changelog_path = "CHANGELOG.md"
+
+[[package]]
+name = "plicowarden-sdk"
+release = false
