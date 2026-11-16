@@ -23,8 +23,9 @@ Normal launch starts with the same clearly labelled demo vault as C# Warden.
 ## Repository boundary
 
 This is an independent GPL-3.0-only Cargo workspace. Plico stays Apache-2.0;
-it does not depend on Plicowarden or the Bitwarden SDK. The `sdk/` package is
-`plicowarden-sdk`; the application package/binary is `plicowarden`.
+it does not depend on Plicowarden or the Bitwarden SDK. The
+`crates/plicowarden-sdk/` package is `plicowarden-sdk`; the root application
+package/binary is `plicowarden`.
 
 Plico dependencies are pinned to Git commit `9c3eab38a16c8151b32275135ccc7f82fa9a3e8f`
 from `https://github.com/SunDoge/plico.git`. Cargo fetches the framework;
@@ -152,8 +153,8 @@ The `plico new` template follows the same fast-iteration policy for new apps.
   `#[component]` and `layout + |cx| { ... }`. No application renderer Widget trait.
 - `src/host.rs`: owns account and preference workers and forwards their wakeups.
   Workers receive values and return replies; they never retain UI state references.
-- `sdk/`: copied GPL application service using the same pinned official Bitwarden
-  SDK as C# Warden. Rust messages replace C ABI/JSON request buffers. The framework
+- `crates/plicowarden-sdk/`: copied GPL application service using the same pinned
+  official Bitwarden SDK as C# Warden. Rust messages replace C ABI/JSON request buffers. The framework
   does not depend on this service; UI-only edits do not recompile its implementation.
 - `src/appearance.rs`: appearance-only JSON, saved by a host worker under the OS
   local data directory for **Plicowarden**, independently of C# preferences.
@@ -258,7 +259,7 @@ tray-host loss, quit and the no-tray fallback. It does not substitute for macOS 
 ```sh
 cargo test --locked -p plicowarden -p plicowarden-sdk
 cargo clippy --locked -p plicowarden -p plicowarden-sdk --all-targets -- -D warnings
-plico fmt --check src tests sdk/src
+plico fmt --check src tests crates/plicowarden-sdk/src
 ```
 
 To install the matching formatter CLI when needed:

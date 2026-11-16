@@ -45,4 +45,6 @@ changelog_path = "CHANGELOG.md"
 
 [[package]]
 name = "plicowarden-sdk"
+# The internal service crate inherits the product version but never creates a
+# second tag, GitHub Release or crates.io publication.
 release = false

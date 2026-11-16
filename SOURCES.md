@@ -5,8 +5,9 @@ crates remain Apache-2.0 and do not depend on this application.
 
 - UI and synthetic fixture adapted from independent C# Warden's uncommitted
   source snapshot read on 2026-11-08 (that repository has no HEAD commit).
-- `sdk/src/service.rs`, `sdk/src/service/`, `sdk/src/server.rs`, and
-  `sdk/src/clipboard.rs` copied from its GPL-3.0-only native backend; transport
+- `crates/plicowarden-sdk/src/service.rs`, `crates/plicowarden-sdk/src/service/`,
+  `crates/plicowarden-sdk/src/server.rs`, and
+  `crates/plicowarden-sdk/src/clipboard.rs` copied from its GPL-3.0-only native backend; transport
   replaced with a typed Rust actor, without C ABI.
 - Original SDK adaptation: Warden Desktop
   `43f390e7a800845c66872df377767ab57f7c67b6`. Official Bitwarden SDK pinned to
@@ -31,7 +32,9 @@ All reused files are local copies, with no dependency on the original checkouts.
 
 ## SSH agent and protected buffer
 
-`sdk/src/ssh_agent.rs`, `sdk/src/protected.rs`, `sdk/tests/ssh_agent.rs` and
+`crates/plicowarden-sdk/src/ssh_agent.rs`,
+`crates/plicowarden-sdk/src/protected.rs`,
+`crates/plicowarden-sdk/tests/ssh_agent.rs` and
 VaultService SSH methods were copied/adapted from GPL-3.0-only Warden Desktop
 commit `43f390e7a800845c66872df377767ab57f7c67b6`. No original checkout dependency.
 `tools/recipes/` is copied from Apache-2.0 Plico development sources on

@@ -1,7 +1,8 @@
 # Plicowarden
 
 - 独立 GPL-3.0-only Rust 密码客户端；Plico 框架保持 Apache-2.0。
-- 应用与 Bitwarden SDK、SSH agent 均在本仓库维护，不将应用服务代码移入 Plico。
+- 应用入口保留在根 `src/`；Bitwarden SDK、SSH agent 等稳定服务边界位于
+  `crates/plicowarden-sdk/`，不将应用服务代码移入 Plico。
 - Plico 依赖统一使用 Cargo.toml 中的完整 Git revision；更新时同步所有 Plico 直接依赖并更新 Cargo.lock，不引入相邻 checkout 的 path dependency，不依赖旧 Warden/Wabou。
 - CLI 使用 usage-rs，错误使用 Snafu。组件遵循 UiContext 首参普通函数与 #[component]，布局使用 + |cx|。
 - 私钥与解密服务留在 sdk worker，UI 只接收签名审批的公开元数据。签名逐次明确批准，锁定、停用、超时必须拒绝。

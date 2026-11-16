@@ -1,35 +1,77 @@
-[package]
-name = "plicowarden"
+[workspace]
+resolver = "3"
+members = ["crates/plicowarden-sdk"]
+default-members = [".", "crates/plicowarden-sdk"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-only"
-publish = false
+repository = "https://github.com/SunDoge/plicowarden"
 
-[workspace]
-resolver = "3"
-members = ["sdk"]
-
-[dependencies]
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+[workspace.dependencies]
+# Keep every Plico crate on one reviewed framework revision.
 plico = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
 plico-dev = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
-plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
 plico-desktop = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a", default-features = false, features = ["wgpu", "desktop-integration"] }
 plico-renderer = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
-plicowarden-sdk = { path = "sdk" }
+plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
+plico-wgpu = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
+plicowarden-sdk = { path = "crates/plicowarden-sdk" }
+
+# Keep the copied application service on one official SDK revision.
+bitwarden-api-api = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-api-base = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-auth = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-core = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e", features = ["internal"] }
+bitwarden-crypto = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-crypto-sync-handler = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-encoding = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-exporters = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-importers = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-pm = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-state = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-sync = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+bitwarden-vault = { git = "https://github.com/bitwarden/sdk-internal.git", rev = "fbd21679c1c3690cba424ad3dbb0ba662eb9863e" }
+
+# Shared ordinary dependencies inherit their version and additive features.
+directories = "6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 snafu = "0.9.2"
-usage-rs = "7.0.0"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "macros", "io-util"] }
 zeroize = "1.9"
-directories = "6.0.0"
+
+[package]
+name = "plicowarden"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+plico.workspace = true
+plico-dev.workspace = true
+plico-runtime.workspace = true
+plico-desktop.workspace = true
+plico-renderer.workspace = true
+plicowarden-sdk.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+snafu.workspace = true
+usage-rs = "7.0.0"
+zeroize.workspace = true
+directories.workspace = true
 getrandom = "0.3"
 rfd = "0.17.2"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 pollster = "1"
-plico-wgpu = { git = "https://github.com/SunDoge/plico.git", rev = "b393250b54a8c791a3cf4ac0dbf8b93c735def7a" }
+plico-wgpu.workspace = true
 
 [profile.dev]
 opt-level = 1
