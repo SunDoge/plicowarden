@@ -25,7 +25,7 @@ fn type_text(ui: &mut Driver<Host>, label: &str, value: &str) {
     ui.execute(Command::Text { text: value.into() }).unwrap();
 }
 #[test]
-fn rejected_http_login_preserves_password_for_retry_and_can_return_to_demo() {
+fn rejected_login_preserves_password_for_retry_and_can_return_to_demo() {
     let (tx, rx) = mpsc::channel();
     let mut host = Host::new(Warden::default(), false);
     host.set_wake_callback(Arc::new(move || {
@@ -39,8 +39,10 @@ fn rejected_http_login_preserves_password_for_retry_and_can_return_to_demo() {
     click(&mut ui, "Done");
     type_text(&mut ui, "Email address", "test@example.invalid");
     click(&mut ui, "Continue");
-    // Bypass UI validation deliberately to exercise the SDK worker error path.
-    ui.update_view(|view| view.app.server = "http://example.invalid".into())
+    // Bypass UI validation with a deterministic configuration error. URL
+    // policy has focused unit coverage; this test exercises the host worker
+    // reply without depending on an OS network timeout.
+    ui.update_view(|view| view.app.region = "unsupported-test-region".into())
         .unwrap();
     type_text(&mut ui, "Master password", "synthetic-test-password");
     let tree = serde_json::to_string(&ui.declarations()).unwrap();
@@ -54,7 +56,7 @@ fn rejected_http_login_preserves_password_for_retry_and_can_return_to_demo() {
         ui.poll_async().unwrap();
         ui.execute(Command::Snapshot).unwrap();
     }
-    assert!(ui.view().app.error.contains("HTTPS"));
+    assert!(ui.view().app.error.contains("Unknown Bitwarden region"));
     assert!(!ui.view().app.password.is_empty());
     assert!(!ui.view().app.authenticated);
     click(&mut ui, "Browse demo vault");
