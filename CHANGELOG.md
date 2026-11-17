@@ -1,0 +1,28 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0](https://github.com/SunDoge/plicowarden/releases/tag/v0.1.0) - 2026-11-16
+
+### Added
+
+- publish initial Plicowarden source
+
+### Fixed
+
+- *(windows)* keep account worker channels alive
+- *(ci)* gate Unix SSH agent internals
+- *(ui)* load demo favicons and refine sidebar motion
+
+### Other
+
+- *(ci)* remove network timing from host failure case
+- *(demo)* use neutral sample identity
+- streamline project overview
+- *(workspace)* move sdk into crates
+- *(testing)* focus recipes on visual review
