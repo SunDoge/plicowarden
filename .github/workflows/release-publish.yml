@@ -241,30 +241,43 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.plan.outputs.ref }}
           persist-credentials: false
-      - name: Install Rust
-        if: needs.plan.outputs.create-release == 'true'
-        uses: actions-rust-lang/setup-rust-toolchain@a188e68d0fd2bd36ad51dccb2b07ba6e75105f30 # v2
-        with:
-          toolchain: stable
-      - name: Keep the tested commit on the main branch
-        if: needs.plan.outputs.create-release == 'true'
-        run: git checkout -B main
-      - name: Create Git tag and GitHub Release
-        if: needs.plan.outputs.create-release == 'true'
-        uses: release-plz/action@8921286633dfa0c4020f7f30bd1c14fe19cbb10e # v0.5.142
-        with:
-          command: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
-      - name: Validate published release
+      - name: Create or validate Git tag and GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+          CREATE_RELEASE: ${{ needs.plan.outputs.create-release }}
+          REF: ${{ needs.plan.outputs.ref }}
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
           set -euo pipefail
           git fetch --force --tags origin
-          git rev-parse --verify "refs/tags/$TAG^{commit}" >/dev/null
+          target="$(git rev-parse "$REF^{commit}")"
+
+          if git rev-parse --verify "refs/tags/$TAG^{commit}" >/dev/null 2>&1; then
+            tagged="$(git rev-parse "refs/tags/$TAG^{commit}")"
+            if [[ "$tagged" != "$target" ]]; then
+              echo "$TAG points to $tagged instead of tested commit $target" >&2
+              exit 1
+            fi
+          elif [[ "$CREATE_RELEASE" != "true" ]]; then
+            echo "requested release tag $TAG does not exist" >&2
+            exit 1
+          fi
+
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            if [[ "$CREATE_RELEASE" != "true" ]]; then
+              echo "GitHub Release $TAG does not exist" >&2
+              exit 1
+            fi
+            gh release create "$TAG" \
+              --target "$target" \
+              --title "Plicowarden $TAG" \
+              --generate-notes
+          fi
+
+          git fetch --force --tags origin
+          tagged="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          [[ "$tagged" == "$target" ]]
           gh release view "$TAG" >/dev/null
 
   publish-assets:
