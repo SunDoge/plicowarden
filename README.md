@@ -60,6 +60,7 @@ python3 scripts/run-recipes.py --no-build --semantic
 - [Capability inventory and remaining parity work](docs/client-parity.md)
 - [Accounts, encrypted cache and local search](docs/accounts-and-cache.md)
 - [Platform integration, windows, tray and SSH agent](docs/platform-integration.md)
+- [Native desktop packaging](docs/packaging.md)
 - [Security and privacy boundaries](docs/security.md)
 - [Architecture, workspace and validation](docs/development.md)
 - [Visual recipe workflow](docs/recipes.md)

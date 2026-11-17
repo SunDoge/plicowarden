@@ -102,6 +102,12 @@ jobs:
           cache-on-failure: false
       - name: Build Plicowarden
         run: cargo build --locked --release --package plicowarden --target x86_64-unknown-linux-gnu --features linux-bundled-freetype
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
+      - name: Create Linux packages
+        run: >-
+          cargo packager --release --target x86_64-unknown-linux-gnu
+          --formats deb,appimage --out-dir dist
       - name: Create archive
         shell: bash
         env:
@@ -117,7 +123,10 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-linux-x86_64
-          path: dist/*.tar.gz
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -142,6 +151,12 @@ jobs:
           cache-on-failure: false
       - name: Build Plicowarden
         run: cargo build --locked --release --package plicowarden --target x86_64-pc-windows-msvc
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
+      - name: Create Windows installer
+        run: >-
+          cargo packager --release --target x86_64-pc-windows-msvc
+          --formats nsis --out-dir dist
       - name: Create archive
         shell: pwsh
         env:
@@ -157,7 +172,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-windows-x86_64
-          path: dist/*.zip
+          path: |
+            dist/*.exe
+            dist/*.zip
           if-no-files-found: error
           retention-days: 7
 
@@ -184,45 +201,38 @@ jobs:
         run: |
           cargo build --locked --release --package plicowarden --target aarch64-apple-darwin
           cargo build --locked --release --package plicowarden --target x86_64-apple-darwin
-      - name: Create application bundle
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked --version 0.11.8
+      - name: Create universal binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            target/aarch64-apple-darwin/release/plicowarden \
+            target/x86_64-apple-darwin/release/plicowarden \
+            -output target/universal-apple-darwin/release/plicowarden
+          chmod 755 target/universal-apple-darwin/release/plicowarden
+      - name: Create macOS bundle and disk image
+        run: >-
+          cargo packager --release --target universal-apple-darwin
+          --formats app,dmg --out-dir dist
+      - name: Create portable application archive
         shell: bash
         env:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           set -euo pipefail
-          app="dist/Plicowarden.app"
-          mkdir -p "$app/Contents/MacOS"
-          lipo -create \
-            target/aarch64-apple-darwin/release/plicowarden \
-            target/x86_64-apple-darwin/release/plicowarden \
-            -output "$app/Contents/MacOS/plicowarden"
-          chmod 755 "$app/Contents/MacOS/plicowarden"
-          cat > "$app/Contents/Info.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key><string>plicowarden</string>
-            <key>CFBundleIdentifier</key><string>io.github.sundoge.plicowarden</string>
-            <key>CFBundleName</key><string>Plicowarden</string>
-            <key>CFBundleDisplayName</key><string>Plicowarden</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>$VERSION</string>
-            <key>CFBundleVersion</key><string>$VERSION</string>
-            <key>LSMinimumSystemVersion</key><string>13.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict>
-          </plist>
-          PLIST
-          plutil -lint "$app/Contents/Info.plist"
-          codesign --force --deep --sign - "$app"
-          ditto -c -k --sequesterRsrc --keepParent "$app" \
+          test -d dist/Plicowarden.app
+          ditto -c -k --sequesterRsrc --keepParent dist/Plicowarden.app \
             "dist/plicowarden-v$VERSION-macos-universal.zip"
       - name: Upload macOS archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-macos-universal
-          path: dist/plicowarden-*.zip
+          path: |
+            dist/*.dmg
+            dist/plicowarden-*.zip
           if-no-files-found: error
           retention-days: 7
 

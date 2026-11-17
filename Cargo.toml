@@ -6,6 +6,7 @@ default-members = [".", "crates/plicowarden-sdk"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+authors = ["SunDoge"]
 license = "GPL-3.0-only"
 repository = "https://github.com/SunDoge/plicowarden"
 
@@ -47,9 +48,48 @@ zeroize = "1.9"
 name = "plicowarden"
 version.workspace = true
 edition.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "A native Rust desktop client for Bitwarden-compatible vaults"
 publish = false
+
+[package.metadata.packager]
+product-name = "Plicowarden"
+identifier = "io.github.sundoge.plicowarden"
+publisher = "SunDoge"
+category = "Utility"
+homepage = "https://github.com/SunDoge/plicowarden"
+long-description = "Plicowarden is a native Rust desktop password-manager client for Bitwarden-compatible vaults, with local encrypted caching, search and an opt-in Unix SSH agent."
+icons = ["packaging/icons/*.png", "packaging/icons/*.ico"]
+license-file = "LICENSE"
+binaries = [{ path = "plicowarden", main = true }]
+
+[package.metadata.packager.linux]
+generate-desktop-entry = true
+
+[package.metadata.packager.deb]
+section = "utils"
+priority = "optional"
+depends = [
+    "libc6",
+    "libgcc-s1",
+    "libfontconfig1",
+    "libgtk-4-1",
+    "libpango-1.0-0",
+    "libpangocairo-1.0-0",
+    "libwayland-client0",
+    "libx11-6",
+    "libxkbcommon0",
+]
+
+[package.metadata.packager.nsis]
+installer-icon = "packaging/icons/plicowarden.ico"
+installer-mode = "currentUser"
+
+[package.metadata.packager.macos]
+minimum-system-version = "13.0"
+signing-identity = "-"
 
 [dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
