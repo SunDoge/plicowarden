@@ -101,7 +101,7 @@ jobs:
           cache-workspace-crates: true
           cache-on-failure: false
       - name: Build Plicowarden
-        run: cargo build --locked --release --package plicowarden --target x86_64-unknown-linux-gnu
+        run: cargo build --locked --release --package plicowarden --target x86_64-unknown-linux-gnu --features linux-bundled-freetype
       - name: Create archive
         shell: bash
         env:
