@@ -5319,8 +5319,8 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
 name = "plico"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "bitflags 2.13.2",
  "plico-macros",
@@ -5336,8 +5336,8 @@ dependencies = [
 
 [[package]]
 name = "plico-app-host"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "plico",
  "plico-dev",
@@ -5346,8 +5346,8 @@ dependencies = [
 
 [[package]]
 name = "plico-desktop"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "image",
  "peniko",
@@ -5366,8 +5366,8 @@ dependencies = [
 
 [[package]]
 name = "plico-dev"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "plico",
  "rmp-serde",
@@ -5379,8 +5379,8 @@ dependencies = [
 
 [[package]]
 name = "plico-macros"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5390,8 +5390,8 @@ dependencies = [
 
 [[package]]
 name = "plico-motion"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "plico",
  "serde",
@@ -5401,10 +5401,11 @@ dependencies = [
 
 [[package]]
 name = "plico-native"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "cairo-rs",
+ "freetype-rs",
  "lru",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
@@ -5423,8 +5424,8 @@ dependencies = [
 
 [[package]]
 name = "plico-renderer"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
@@ -5450,8 +5451,8 @@ dependencies = [
 
 [[package]]
 name = "plico-runtime"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "kurbo",
  "peniko",
@@ -5470,8 +5471,8 @@ dependencies = [
 
 [[package]]
 name = "plico-shell"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "accesskit",
  "accesskit_xplat",
@@ -5509,8 +5510,8 @@ dependencies = [
 
 [[package]]
 name = "plico-wgpu"
-version = "0.4.0"
-source = "git+https://github.com/SunDoge/plico.git?rev=b393250b54a8c791a3cf4ac0dbf8b93c735def7a#b393250b54a8c791a3cf4ac0dbf8b93c735def7a"
+version = "0.4.2"
+source = "git+https://github.com/SunDoge/plico.git?rev=a6bd5837918a3b975a7a5a9a07d033cfcab0030c#a6bd5837918a3b975a7a5a9a07d033cfcab0030c"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -5530,6 +5531,7 @@ dependencies = [
  "resvg",
  "rustc-hash 2.1.3",
  "snafu",
+ "swash",
  "tracing",
  "wgpu",
  "winit",
@@ -7333,6 +7335,17 @@ checksum = "695b5790b3131dafa99b3bbfd25a216edb3d216dad9ca208d4657bfb8f2abc3d"
 dependencies = [
  "kurbo",
  "siphasher",
+]
+
+[[package]]
+name = "swash"
+version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c2499c2d826531388872b2268718aed907a39bd785ab0dcfe57fab26283f92e"
+dependencies = [
+ "skrifa",
+ "yazi",
+ "zeno",
 ]
 
 [[package]]
@@ -9197,6 +9210,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
+name = "yazi"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac366ea532fa8ee6a992cec9dea525b1dc284e69702f36c2ab5fbebadc81ec86"
+
+[[package]]
 name = "yeslogic-fontconfig-sys"
 version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9335,6 +9354,12 @@ checksum = "d1afec51604565183aeb5c54c20aeab286120d4e4460f7f76e3e8bb8c0d99473"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "zeno"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6df3dc4292935e51816d896edcd52aa30bc297907c26167fec31e2b0c6a32524"
 
 [[package]]
 name = "zerocopy"
