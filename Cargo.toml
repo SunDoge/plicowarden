@@ -61,7 +61,11 @@ publisher = "SunDoge"
 category = "Utility"
 homepage = "https://github.com/SunDoge/plicowarden"
 long-description = "Plicowarden is a native Rust desktop password-manager client for Bitwarden-compatible vaults, with local encrypted caching, search and an opt-in Unix SSH agent."
-icons = ["packaging/icons/*.png", "packaging/icons/*.ico"]
+icons = [
+    "packaging/icons/*.png",
+    "packaging/icons/*.ico",
+    "packaging/icons/*.icns",
+]
 license-file = "LICENSE"
 binaries = [{ path = "plicowarden", main = true }]
 

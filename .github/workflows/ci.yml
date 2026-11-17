@@ -46,6 +46,8 @@ jobs:
           cache-workspace-crates: true
           cache-on-failure: false
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Check packaging assets
+        run: python3 scripts/check-packaging-assets.py
       - name: Check Rust formatting
         run: cargo fmt --all --check
       - name: Test Rust workspace
