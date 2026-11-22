@@ -12,12 +12,12 @@ repository = "https://github.com/SunDoge/plicowarden"
 
 [workspace.dependencies]
 # Keep every Plico crate on one reviewed framework revision.
-plico = { git = "https://github.com/SunDoge/plico.git", rev = "e35ecc93bf8be802ed195468e7b895cd3628f71e" }
-plico-dev = { git = "https://github.com/SunDoge/plico.git", rev = "e35ecc93bf8be802ed195468e7b895cd3628f71e" }
-plico-desktop = { git = "https://github.com/SunDoge/plico.git", rev = "e35ecc93bf8be802ed195468e7b895cd3628f71e", default-features = false, features = ["wgpu", "desktop-integration"] }
-plico-renderer = { git = "https://github.com/SunDoge/plico.git", rev = "e35ecc93bf8be802ed195468e7b895cd3628f71e" }
-plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "e35ecc93bf8be802ed195468e7b895cd3628f71e" }
-plico-wgpu = { git = "https://github.com/SunDoge/plico.git", rev = "e35ecc93bf8be802ed195468e7b895cd3628f71e" }
+plico = { git = "https://github.com/SunDoge/plico.git", rev = "8818c2dcd05165daee6f72cb8f18ae97b0efc4ff" }
+plico-dev = { git = "https://github.com/SunDoge/plico.git", rev = "8818c2dcd05165daee6f72cb8f18ae97b0efc4ff" }
+plico-desktop = { git = "https://github.com/SunDoge/plico.git", rev = "8818c2dcd05165daee6f72cb8f18ae97b0efc4ff", default-features = false, features = ["wgpu", "desktop-integration"] }
+plico-renderer = { git = "https://github.com/SunDoge/plico.git", rev = "8818c2dcd05165daee6f72cb8f18ae97b0efc4ff" }
+plico-runtime = { git = "https://github.com/SunDoge/plico.git", rev = "8818c2dcd05165daee6f72cb8f18ae97b0efc4ff" }
+plico-wgpu = { git = "https://github.com/SunDoge/plico.git", rev = "8818c2dcd05165daee6f72cb8f18ae97b0efc4ff" }
 plicowarden-sdk = { path = "crates/plicowarden-sdk" }
 
 # Keep the copied application service on one official SDK revision.
