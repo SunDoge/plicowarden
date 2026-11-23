@@ -417,6 +417,7 @@ pub struct Warden {
     pub folder_name: String,
     pub folder_names: BTreeMap<String, String>,
     pub popups: BTreeMap<String, plico::PopoverState>,
+    pub lock_screen: bool,
     pub login_password_step: bool,
     pub login_show_password: bool,
     pub environment_open: bool,
@@ -549,6 +550,7 @@ impl Default for Warden {
             folder_name: String::new(),
             folder_names: BTreeMap::new(),
             popups: BTreeMap::new(),
+            lock_screen: false,
             login_password_step: false,
             login_show_password: false,
             environment_open: false,
@@ -926,6 +928,7 @@ impl Warden {
         self.shown_password = None;
     }
     pub fn open_login(&mut self) {
+        self.lock_screen = false;
         self.router.go(Page::Login);
     }
     /// Show the vault, recording the previous page so Back can return to it.
@@ -1031,6 +1034,7 @@ impl Warden {
         self.confirm_modal.close();
         self.confirm_action = None;
         self.error.clear();
+        self.lock_screen = true;
         self.notice = "Vault locked.".into();
         self.login_password_step = self.has_cached_account();
     }
@@ -1083,6 +1087,7 @@ impl Warden {
             return;
         }
         self.email = self.email.trim().to_owned();
+        self.lock_screen = self.has_cached_account();
         self.persist_login_email = true;
         self.error.clear();
         self.notice.clear();
@@ -1099,6 +1104,7 @@ impl Warden {
         if !self.factors.is_empty() {
             self.commands.push(HostCommand::Disconnect);
         }
+        self.lock_screen = false;
         self.login_progress = Default::default();
         self.sync_progress_open = false;
         self.compact_sidebar = false;
@@ -1127,6 +1133,7 @@ impl Warden {
     }
     pub fn add_account(&mut self) {
         self.lock();
+        self.lock_screen = false;
         self.adding_account = true;
         self.email.clear();
         self.login_password_step = false;
@@ -1282,6 +1289,7 @@ impl Warden {
             self.email = email;
         }
         self.login_password_step = false;
+        self.lock_screen = false;
         self.notice = "Session expired. Sign in again.".into();
     }
     pub fn push_notification(
@@ -1345,6 +1353,7 @@ impl Warden {
             "Sign in again to continue syncing this vault.",
             None,
         );
+        self.lock_screen = false;
         self.notice = "Session expired. Sign in to sync.".into();
     }
     fn record_error(&mut self, message: String) {
@@ -1445,6 +1454,7 @@ impl Warden {
         if matches!(&event.result, Ok(Reply::Locked)) {
             // The worker reports a timeout error before its mandatory lock.
             // Clearing that error here made failed sign-ins look like a silent reset.
+            let was_locked = self.lock_screen;
             let login_error = (self.router.show(Page::Login) && !self.authenticated)
                 .then(|| std::mem::take(&mut self.error))
                 .filter(|error| !error.is_empty());
@@ -1452,6 +1462,7 @@ impl Warden {
             let progress = self.login_progress.clone();
             self.lock();
             if let Some(error) = login_error {
+                self.lock_screen = was_locked;
                 self.login_progress = progress;
                 if let Some(password) = retry_password {
                     self.password.set(password);
@@ -1754,6 +1765,7 @@ impl Warden {
                 Reply::SavedAccounts(accounts) => {
                     self.lock();
                     self.saved_accounts = accounts;
+                    self.lock_screen = false;
                     self.adding_account = true;
                     self.email.clear();
                     self.login_password_step = false;

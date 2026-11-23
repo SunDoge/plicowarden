@@ -28,7 +28,14 @@ impl plico_dev::App for Warden {
         let mut theme = plico::Theme::light();
         // Match Triwarden's macOS hierarchy on every desktop backend; backing
         // scale must not silently turn Linux text into a larger design system.
+        theme.surface = 0xf1f3f6;
+        theme.panel = 0xffffff;
+        theme.control = 0xf5f6f8;
+        theme.control_hover = 0xe9e9ec;
+        theme.control_pressed = 0xdddde1;
+        theme.selection = 0xdfeafa;
         theme.metrics.font_size = 13;
+        theme.metrics.radius = display::CORNER_RADIUS;
         theme
     }
     fn on_key_event(&mut self, key: &plico::KeyEvent) -> bool {
@@ -390,6 +397,19 @@ impl PreviewConfig {
             "security" => {
                 app.settings_open = true;
                 app.settings_tab = "security".into();
+            }
+            "locked" => {
+                app.email = "alex@example.invalid".into();
+                app.region = "us".into();
+                let config = app.account_configuration();
+                app.saved_accounts
+                    .push(plicowarden_sdk::cache::SavedAccount {
+                        id: plicowarden_sdk::cache::account_id(&config)
+                            .expect("valid synthetic account"),
+                        config,
+                        cached_at: 123,
+                    });
+                app.lock();
             }
             "login" => app.open_login(),
             "generator" => app.open_generator(),

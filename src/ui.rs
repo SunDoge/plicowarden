@@ -3,84 +3,55 @@ use crate::{
     model::{AppNotification, HostCommand, Item, NotificationKind, Page, Warden},
 };
 use plico::prelude::*;
-use plico::{BoxShadow, Layout, LiquidGlass};
+use plico::{BoxShadow, Layout};
 use plicowarden_sdk::{
     Request,
     ssh_agent::{AccessRecord, Outcome},
 };
 
+pub(crate) const RADIUS: f32 = crate::display::CORNER_RADIUS as f32;
+
 pub const INK: Color = Color::Foreground;
 pub const MUTED: Color = Color::Muted;
 pub const EDGE: Color = Color::Border;
 pub const ICON: Color = Color::Muted;
-static BACKDROP: ShaderAsset = ShaderAsset::new(include_str!("../assets/backdrop.wgsl"));
-/// The window's pastel wash, drawn behind every floating panel.
-#[component]
-#[rustfmt::skip]
-fn backdrop(ui: &mut UiContext) {
-    if ui.display_preferences().reduce_transparency {
-        return;
-    }
-    let size = ui.viewport_size();
-    shader(ui, &BACKDROP)
-        .absolute(0., 0.)
-        .width(size[0])
-        .height(size[1])
-        .radius(0.)
-        .border(0., EDGE)
-        .animated(false)
-        .paused(true);
+#[track_caller]
+pub(crate) fn quiet_nav<'u, 'e, 't>(
+    ui: &'u mut UiContext<'e>,
+    label: impl Into<std::borrow::Cow<'t, str>>,
+    selected: bool,
+) -> plico::ButtonBase<'u, 'e, 't> {
+    plico::widgets::nav_entry_with_appearance(
+        ui,
+        label,
+        selected,
+        plico::widgets::NavEntryAppearance::Quiet,
+    )
+    .background(if selected {
+        Color::ControlPressed
+    } else {
+        Color::Panel
+    })
+    .background_alpha(if selected { 1. } else { 0. })
+    .hover_background(if selected {
+        Color::ControlPressed
+    } else {
+        Color::ControlHover
+    })
+    .color(INK)
 }
-/// A solid card over the window wash.
+
+/// Opaque content surfaces share one shallow shadow across vault and account screens.
 #[track_caller]
 pub fn surface<'u, 'e>(ui: &'u mut UiContext<'e>) -> Layout<'u, 'e> {
     column(ui)
         .width_percent(100.)
         .shrink(0.)
-        .radius(18.)
-        .corner_smoothing(1.)
-        .background(Color::Literal(0xffffff))
-        .border(1., Color::Literal(0xe7e4ee))
-        .elevation(Elevation::PANEL)
+        .radius(RADIUS)
+        .background(Color::Panel)
+        .elevation(Elevation::SUBTLE)
 }
 
-/// Scene-backed material reserved for app chrome and floating surfaces. Vault
-/// content cards remain opaque so secrets and metadata keep predictable contrast.
-pub fn chrome_glass() -> LiquidGlass {
-    LiquidGlass {
-        clarity: 0.56,
-        frost: 0.4,
-        tint_opacity: 0.08,
-        refraction: 0.85,
-        rim: 0.28,
-        ..LiquidGlass::regular()
-    }
-}
-
-/// More opaque than app chrome so text-heavy dialogs never compete with the
-/// vault visible behind them.
-pub fn dialog_glass() -> LiquidGlass {
-    LiquidGlass {
-        clarity: 0.24,
-        frost: 0.54,
-        tint_opacity: 0.2,
-        refraction: 0.7,
-        rim: 0.3,
-        ..LiquidGlass::regular()
-    }
-}
-
-/// A glass panel with the framework's paired contact and ambient shadows.
-#[track_caller]
-pub fn glass_surface<'u, 'e>(ui: &'u mut UiContext<'e>) -> Layout<'u, 'e> {
-    column(ui)
-        .width_percent(100.)
-        .shrink(0.)
-        .radius(18.)
-        .corner_smoothing(1.)
-        .material(chrome_glass())
-        .elevation(Elevation::PANEL)
-}
 /// Ordinary diagnostics use the native host clipboard, independently of the
 /// account worker, so copying never clears an error or starts an SDK session.
 #[component]
@@ -94,7 +65,7 @@ pub fn copyable_error(ui: &mut UiContext, message: &str) -> bool {
         column(ui).width_percent(100.).selectable(true) + |ui| {
             text(ui, message).color(Color::Danger).width_percent(100.);
         };
-        copied = button(ui).text("Copy error").icon(crate::icons::get("copy")).radius(6.).font_size(13).clicked();
+        copied = button(ui).text("Copy error").icon(crate::icons::get("copy")).radius(RADIUS).font_size(13).clicked();
     };
     copied
 }
@@ -107,7 +78,7 @@ pub fn glyph(ui: &mut UiContext, name: &str, size: f32, color: Color) {
 pub fn tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool) -> bool {
     tooltip(ui, label).children(|ui| {
         (button_base(ui, label).width(32.).min_width(32.).max_width(32.).height(32.).min_height(32.).max_height(32.)
-            .shrink(0.).padding(7.).radius(6.).corner_smoothing(1.)
+            .shrink(0.).padding(7.).radius(RADIUS).corner_smoothing(1.)
             .disabled(disabled) + |ui|
         {
             glyph(ui, name, 16., ICON);
@@ -122,7 +93,7 @@ pub fn tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool) -> bool
 pub fn toolbar_tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool) -> bool {
     tooltip(ui, label).children(|ui| {
         (button_base(ui, label).width(32.).min_width(32.).max_width(32.).height(28.).min_height(28.).max_height(28.)
-            .shrink(0.).padding(6.).radius(6.).corner_smoothing(1.)
+            .shrink(0.).padding(6.).radius(RADIUS).corner_smoothing(1.)
             .disabled(disabled) + |ui|
         {
             glyph(ui, name, 16., ICON);
@@ -134,7 +105,7 @@ pub fn toolbar_tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool)
 fn footer_tool(ui: &mut UiContext, name: &str, label: &str, disabled: bool) -> bool {
     tooltip(ui, label).children(|ui| {
         (button_base(ui, label).width(26.).height(26.).min_width(26.).min_height(26.).max_width(26.).max_height(26.)
-            .shrink(0.).padding(6.).radius(8.).corner_smoothing(1.).border(0., EDGE).disabled(disabled) + |ui|
+            .shrink(0.).padding(6.).radius(RADIUS).corner_smoothing(1.).border(0., EDGE).disabled(disabled) + |ui|
         {
             glyph(ui, name, 14., ICON);
         }).response.clicked()
@@ -163,7 +134,7 @@ fn ssh_history_row(ui: &mut UiContext, record: &AccessRecord, now: i64) {
                 .width_percent(100.).ellipsis(true);
         };
         column(ui).shrink(0.).align(Align::End).gap(5) + |ui| {
-            row(ui).padding_x(7).padding_y(3).radius(10.).corner_smoothing(0.)
+            row(ui).padding_x(7).padding_y(3).radius(RADIUS).corner_smoothing(1.)
                 .border(1., Color::Border).gap(4).align(Align::Center) + |ui|
             {
                 glyph(ui, icon, 9., color);
@@ -194,8 +165,8 @@ pub(crate) fn relative_time(now: i64, at: i64) -> String {
 #[component]
 #[rustfmt::skip]
 pub fn brand(ui: &mut UiContext, item: &Item, size: f32) {
-    column(ui).width(size).height(size).shrink(0.).radius(size * 0.25).corner_smoothing(1.)
-        .background(Color::Panel).border(1., Color::Literal(0xeae9ee)).elevation(Elevation::SUBTLE)
+    column(ui).width(size).height(size).shrink(0.).radius(RADIUS).corner_smoothing(1.)
+        .background(Color::Control)
         .align(Align::Center).justify(Justify::Center) + |ui|
     {
         if let Some(icon) = &item.icon {
@@ -228,15 +199,13 @@ fn nav(
     selected: bool,
     disabled: bool,
 ) -> bool {
-    (plico::widgets::nav_entry_with_appearance(
-        ui, label, selected, plico::widgets::NavEntryAppearance::Quiet,
-    ).height(28.).min_height(28.).max_height(28.)
-        .padding_x(8.).padding_y(3.).gap(7.).radius(8.)
+    (quiet_nav(ui, label, selected).height(28.).min_height(28.).max_height(28.)
+        .padding_x(8.).padding_y(3.).gap(7.).radius(RADIUS)
         .border(0., EDGE).justify(Justify::Start).disabled(disabled).opacity(if disabled { 0.45 } else { 1. })
         .transition(160) + |ui|
     {
         glyph(ui, name, 16., ICON);
-        text(ui, label).grow(1.).font_size(13);
+        text(ui, label).grow(1.).font_size(13).weight(if selected { 650 } else { 500 });
         if let Some(count) = count {
             text!(ui, "{count}").font_size(12).color(MUTED);
         }
@@ -245,10 +214,8 @@ fn nav(
 #[component]
 #[rustfmt::skip]
 fn settings_nav(ui: &mut UiContext, icon: &str, label: &str, selected: bool) -> bool {
-    (plico::widgets::nav_entry_with_appearance(
-        ui, label, selected, plico::widgets::NavEntryAppearance::Quiet,
-    ).height(30.).padding_x(10.).padding_y(4.)
-        .gap(8.).radius(8.).justify(Justify::Start).border(0., EDGE)
+    (quiet_nav(ui, label, selected).height(30.).padding_x(10.).padding_y(4.)
+        .gap(8.).radius(RADIUS).justify(Justify::Start).border(0., EDGE)
         .transition(140) + |ui|
     {
         glyph(ui, icon, 16., if selected { INK } else { MUTED });
@@ -263,8 +230,8 @@ fn settings_nav(ui: &mut UiContext, icon: &str, label: &str, selected: bool) -> 
 fn sidebar_section(ui: &mut UiContext, label: &str, open: bool) -> bool {
     (button_base(ui, label).width_percent(100.).height(28.).min_height(28.).max_height(28.)
         .padding_x(10.).padding_y(3.)
-        .gap(6.).radius(6.).justify(Justify::Start).border(0., EDGE)
-        .hover_background(Color::Literal(0xf3f1f7)) + |ui| {
+        .gap(6.).radius(RADIUS).justify(Justify::Start).border(0., EDGE)
+        .hover_background(Color::ControlHover) + |ui| {
         glyph(ui, if open { "chevron-down" } else { "chevron" }, 10., MUTED);
         text(ui, label).font_size(11).weight(650).color(MUTED);
     }).response.clicked()
@@ -403,12 +370,10 @@ fn flatten_folders(
 #[component]
 #[rustfmt::skip]
 fn folder_row(ui: &mut UiContext, row: &FolderRow, selected: bool, disabled: bool) -> bool {
-    (plico::widgets::nav_entry_with_appearance(
-        ui, row.path.as_str(), selected, plico::widgets::NavEntryAppearance::Quiet,
-    ).height(28.)
+    (quiet_nav(ui, row.path.as_str(), selected).height(28.)
         .min_height(28.).max_height(28.)
         .padding_left(8. + row.depth as f32 * 14.).padding_right(8.).padding_y(3.)
-        .gap(7.).radius(8.).border(0., EDGE).justify(Justify::Start).disabled(disabled)
+        .gap(7.).radius(RADIUS).border(0., EDGE).justify(Justify::Start).disabled(disabled)
         .transition(160) + |ui| {
         // Keep one leading icon lane. A disclosure chevron replaces
         // the folder glyph for branches instead of inserting a second lane
@@ -462,8 +427,8 @@ fn notification_row(ui: &mut UiContext, notification: &AppNotification,
         NotificationKind::LoginRequest => ("shield", Color::Accent),
     };
     row(ui).width_percent(100.).padding(10.).gap(10.).align(Align::Start)
-        .radius(8.).background(Color::Panel) + |ui| {
-        column(ui).width(22.).height(22.).shrink(0.).radius(6.).background(Color::Control)
+        .radius(RADIUS).background(Color::Panel) + |ui| {
+        column(ui).width(22.).height(22.).shrink(0.).radius(RADIUS).background(Color::Control)
             .align(Align::Center).justify(Justify::Center) + |ui| {
             glyph(ui, icon, 13., color);
         };
@@ -551,9 +516,8 @@ impl Warden {
             .flatten();
         let action_editable = self.details.as_ref().is_some_and(|details| details.editable);
         column(ui).position(plico::Position::Relative).width_percent(100.).height_percent(100.)
-            .background(Color::Literal(0xf2f2fa)) + |ui|
+            .background(Color::Surface) + |ui|
         {
-            backdrop(ui);
             if self.router.show(Page::Login) {
                 self.account(ui);
                 self.accounts_ui(ui);
@@ -608,8 +572,8 @@ impl Warden {
                         let x = (viewport_width * 0.5 - pill * 0.5 - 8.).max(120.);
                         let y = (header_height - 28.) * 0.5;
                         if (button_base(ui, "Search or run a command").absolute(x, y)
-                            .width(pill).height(28.).padding_x(12.).gap(8.).radius(14.)
-                            .border(0., EDGE).material(chrome_glass()).elevation(Elevation::SUBTLE)
+                            .width(pill).height(28.).padding_x(12.).gap(8.).radius(RADIUS)
+                            .border(0., EDGE).background(Color::Panel).elevation(Elevation::SUBTLE)
                             .justify(Justify::Start) + |ui| {
                             glyph(ui, "search", 14., MUTED);
                             text(ui, "Search or run a command").font_size(12).color(MUTED)
@@ -640,10 +604,10 @@ impl Warden {
                             "Notifications".to_owned()
                         };
                         if tooltip(ui, description).children(|ui| {
-                            (button_base(ui, "Notifications").width(32.).height(28.).radius(6.)
+                            (button_base(ui, "Notifications").width(32.).height(28.).radius(RADIUS)
                                 .border(0., EDGE).justify(Justify::Center).gap(3.)
                                 .background(Color::Panel).background_alpha(0.)
-                                .hover_background(Color::Literal(0xf3f1f7)) + |ui| {
+                                .hover_background(Color::ControlHover) + |ui| {
                                 glyph(ui, "bell", 15., if unread > 0 { INK } else { MUTED });
                                 if unread > 0 {
                                     text!(ui, "{unread}").font_size(10).weight(700).color(Color::Danger);
@@ -940,7 +904,7 @@ impl Warden {
     fn vault_footer(&mut self, ui: &mut UiContext) {
         let [width, height] = ui.viewport_size();
         row(ui).absolute((width - 118.).max(8.), (height - 46.).max(8.))
-            .height(32.).padding_x(4.).gap(4.).radius(16.).corner_smoothing(1.)
+            .height(32.).padding_x(4.).gap(4.).radius(RADIUS).corner_smoothing(1.)
             .background(Color::Panel).border(1., Color::Literal(0xe2deea))
             .shadow(BoxShadow {
                 offset_x: 0., offset_y: 3., blur: 10., spread: 0.,
@@ -953,7 +917,7 @@ impl Warden {
             });
             let sync_clicked = (button_base(ui, "Sync").width(26.).height(26.)
                 .min_width(26.).min_height(26.).max_width(26.).max_height(26.)
-                .shrink(0.).padding(5.).radius(8.).corner_smoothing(1.)
+                .shrink(0.).padding(5.).radius(RADIUS).corner_smoothing(1.)
                 .border(0., EDGE).disabled(!self.authenticated || (self.busy && !syncing)) + |ui| {
                 if syncing {
                     plico::widgets::spinner_sized(ui, 16.);
@@ -981,13 +945,13 @@ impl Warden {
         let mut close = false;
         column(ui).position(plico::Position::Absolute).inset_right(20.).inset_bottom(54.)
             .width(330.).max_height(260.).scroll_y(true).padding(14.).gap(8.)
-            .radius(14.).corner_smoothing(1.).material(chrome_glass())
+            .radius(RADIUS).corner_smoothing(1.).background(Color::Panel)
             .elevation(Elevation::OVERLAY) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
                 text(ui, "Sync progress").font_size(13).weight(650).width(0.).grow(1.);
                 if (button_base(ui, "Close sync progress").width(24.).height(24.)
                     .min_width(24.).min_height(24.).max_width(24.).max_height(24.)
-                    .shrink(0.).padding(5.).radius(6.).border(0., EDGE) + |ui| {
+                    .shrink(0.).padding(5.).radius(RADIUS).border(0., EDGE) + |ui| {
                     glyph(ui, "close", 12., MUTED);
                 }).response.clicked()
                 {
@@ -1006,11 +970,11 @@ impl Warden {
         top_reserved: bool, overlay: bool, visibility: f32) {
         let mut panel = column(ui).position(plico::Position::Relative).width(width).shrink(0.)
             .height_percent(100.).padding(0.).gap(0)
-            .radius(18.).corner_smoothing(1.).clip(true).opacity(visibility)
+            .radius(RADIUS).corner_smoothing(1.).clip(true).opacity(visibility)
             .translate(-16. * (1. - visibility), 0.)
             .disabled(!interactive)
-            .material(chrome_glass())
-            .elevation(Elevation::PANEL);
+            .background(Color::Panel)
+            .elevation(if overlay { Elevation::OVERLAY } else { Elevation::SUBTLE });
         if overlay {
             panel = panel.absolute(0., 0.);
         }
@@ -1119,8 +1083,8 @@ impl Warden {
                     }
                     if (button_base(ui, "Manage folders").width_percent(100.).height(28.)
                         .min_height(28.).max_height(28.).padding_x(10.).padding_y(3.).gap(8.)
-                        .radius(8.).justify(Justify::Start).border(0., EDGE)
-                        .hover_background(Color::Literal(0xf1eef6))
+                        .radius(RADIUS).justify(Justify::Start).border(0., EDGE)
+                        .hover_background(Color::ControlHover)
                         .disabled(!self.authenticated || self.busy || self.editor.is_some()) + |ui| {
                         glyph(ui, "folder", 14., MUTED);
                         text(ui, "Manage folders").font_size(13).color(MUTED).grow(1.);
@@ -1158,11 +1122,11 @@ impl Warden {
             };
             column(ui).width_percent(100.).shrink(0.).padding_x(10.).padding_bottom(10.) + |ui| {
                 if (button_base(ui, "Switch account").width_percent(100.).padding(8.).gap(10.)
-                    .radius(14.).corner_smoothing(1.).border(0., EDGE)
-                    .material(chrome_glass()).elevation(Elevation::CONTROL)
+                    .radius(RADIUS).corner_smoothing(1.).border(0., EDGE)
+                    .background(Color::Panel).elevation(Elevation::CONTROL)
                     .disabled(self.busy) + |ui| {
-                    avatar(ui).fallback("A").size(34.).font_size(13).background(Color::Selection)
-                        .color(Color::Literal(0x1d4ed8));
+                    avatar(ui).fallback("A").size(34.).font_size(13).background(Color::ControlPressed)
+                        .color(INK);
                     column(ui).width(0.).grow(1.).min_width(0.).gap(3) + |ui| {
                         text(
                             ui,
@@ -1190,8 +1154,8 @@ impl Warden {
     #[component]
     #[rustfmt::skip]
     fn item_list(&mut self, ui: &mut UiContext, visible: &[Item], width: f32) {
-        column(ui).width(width).shrink(0.).height_percent(100.).radius(18.).corner_smoothing(1.)
-            .material(chrome_glass()).elevation(Elevation::PANEL).clip(true) + |ui| {
+        column(ui).width(width).shrink(0.).height_percent(100.).radius(RADIUS).corner_smoothing(1.)
+            .background(Color::Panel).elevation(Elevation::SUBTLE).clip(true) + |ui| {
             row(ui).width_percent(100.).height(48.).shrink(0.).padding_x(8.).align(Align::Center).gap(6) + |ui| {
                 column(ui).width(0.).grow(1.) + |ui| {
                     search_field(ui, "Search all vaults", "Search all vaults", &mut self.query);
@@ -1218,7 +1182,7 @@ impl Warden {
                 row(ui).width_percent(100.).height(28.).shrink(0.).padding_x(10.)
                     .align(Align::Center) + |ui| {
                     if (button_base(ui, "Clear filter").height(22.).width(150.)
-                        .padding_x(8.).gap(6.).radius(8.).border(1., Color::Border)
+                        .padding_x(8.).gap(6.).radius(RADIUS).border(1., Color::Border)
                         .background(Color::Control).hover_background(Color::ControlHover)
                         .justify(Justify::Start) + |ui| {
                         text(ui, &label).font_size(11).weight(600)
@@ -1266,7 +1230,7 @@ impl Warden {
                                     if (button_base(
                                         ui,
                                         format!("Toggle bulk selection for {}", item.name),
-                                    ).width(22.).height(22.).radius(6.).padding(2).border(1., Color::Border)
+                                    ).width(22.).height(22.).radius(RADIUS).padding(2).border(1., Color::Border)
                                         .selected(checked)
                                         .background(if checked { Color::Accent } else { Color::Control })
                                         .disabled(self.busy) + |ui|
@@ -1286,11 +1250,10 @@ impl Warden {
                                 clicked =
                                     (button_base(ui, format!("Select {}", item.name)).width(0.).grow(1.)
                                         .min_width(0.).height(56.).padding(9.).gap(12.).justify(Justify::Start)
-                                        .radius(13.).corner_smoothing(1.).border(0., EDGE)
-                                        .background(Color::Literal(0xffffff))
+                                        .radius(RADIUS).corner_smoothing(1.).border(0., EDGE)
+                                        .background(Color::ControlPressed)
                                         .background_alpha(if selected { 1. } else { 0. })
-                                        .hover_background(Color::Literal(0xf4f1f8))
-                                        .elevation(if selected { Elevation::CONTROL } else { Elevation::NONE })
+                                        .hover_background(if selected { Color::ControlPressed } else { Color::ControlHover })
                                         .disabled(self.busy || self.editor.is_some()) + |ui|
                                     {
                                         brand(ui, item, 38.);
@@ -1365,7 +1328,6 @@ impl Warden {
             .header(false)
             .title("Search")
             .width(560.)
-            .material(dialog_glass())
             .motion(plico::Motion::None)
             .children(|ui| {
             let mut scroll_to = None;
@@ -1427,11 +1389,11 @@ impl Warden {
                     command_at += 1;
                     ui.keyed(crate::model::business_key(&format!("command {command_at}")), |ui| {
                         if (button_base(ui, *label).width_percent(100.).height(34.)
-                            .padding_x(8.).gap(8.).radius(8.).border(0., EDGE)
+                            .padding_x(8.).gap(8.).radius(RADIUS).border(0., EDGE)
                             .justify(Justify::Start)
-                            .background(Color::Literal(0xebe8f1))
+                            .background(Color::ControlPressed)
                             .background_alpha(if selected { 1. } else { 0. })
-                            .hover_background(Color::Literal(0xf3f1f7)) + |ui| {
+                            .hover_background(if selected { Color::ControlPressed } else { Color::ControlHover }) + |ui| {
                             glyph(ui, icon, 15., MUTED);
                             text(ui, *label).font_size(13).width(0.).grow(1.).min_width(0.);
                         }).response.clicked()
@@ -1452,11 +1414,11 @@ impl Warden {
                     let label = format!("Open {}", item.name);
                     ui.keyed(crate::model::business_key(&format!("palette {item_at}")), |ui| {
                         if (button_base(ui, &label).width_percent(100.).height(44.)
-                            .padding_x(8.).gap(10.).radius(8.).border(0., EDGE)
+                            .padding_x(8.).gap(10.).radius(RADIUS).border(0., EDGE)
                             .justify(Justify::Start)
-                            .background(Color::Literal(0xebe8f1))
+                            .background(Color::ControlPressed)
                             .background_alpha(if selected { 1. } else { 0. })
-                            .hover_background(Color::Literal(0xf3f1f7)) + |ui| {
+                            .hover_background(if selected { Color::ControlPressed } else { Color::ControlHover }) + |ui| {
                             brand(ui, item, 30.);
                             column(ui).width(0.).grow(1.).min_width(0.).gap(1.) + |ui| {
                                 text(ui, &item.name).font_size(13).weight(650)
@@ -1535,7 +1497,7 @@ impl Warden {
         }
         column(ui).absolute((viewport_width - panel_width - 8.).max(8.), header_height + 10.)
             .width(panel_width).height(panel_height)
-            .background(Color::Panel).border(1., Color::Literal(0xe7e4ee)).radius(14.)
+            .background(Color::Panel).border(1., Color::Literal(0xe7e4ee)).radius(RADIUS)
             .shadow(BoxShadow {
                 offset_x: 0., offset_y: 10., blur: 28., spread: 0.,
                 color: Color::Literal(0x241d36), opacity: 0.14,
@@ -1615,7 +1577,6 @@ impl Warden {
             .header(false)
             .title("Settings")
             .width(width)
-            .material(dialog_glass())
             .motion(plico::Motion::None)
             .children(|ui| {
             column(ui).width_percent(100.).height(height).gap(0) + |ui| {
@@ -1845,7 +1806,7 @@ impl Warden {
         let enabled = self.ssh_socket.is_some();
         surface(ui).padding(16).gap(12) + |ui| {
             row(ui).width_percent(100.).gap(12).align(Align::Center) + |ui| {
-                column(ui).width(34.).height(34.).shrink(0.).radius(10.).background(Color::Control)
+                column(ui).width(34.).height(34.).shrink(0.).radius(RADIUS).background(Color::Control)
                     .align(Align::Center).justify(Justify::Center) + |ui|
                 {
                     glyph(ui, "key", 16., if enabled { INK } else { MUTED });
@@ -1861,7 +1822,7 @@ impl Warden {
                 };
             };
             if let Some(socket) = self.ssh_socket.clone() {
-                column(ui).width_percent(100.).gap(4).padding(10).radius(8.)
+                column(ui).width_percent(100.).gap(4).padding(10).radius(RADIUS)
                     .background(Color::Control) + |ui|
                 {
                     text(ui, "Socket · set SSH_AUTH_SOCK to this path").font_size(12)

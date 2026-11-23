@@ -77,7 +77,7 @@ impl Warden {
         let mut confirm = false;
         let action = self.bulk_confirm.clone().unwrap_or_default();
         modal(ui, &mut state).title("Confirm bulk action").width(440.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             text!(
                 ui,
                 "{} {} items?",

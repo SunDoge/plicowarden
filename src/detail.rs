@@ -162,7 +162,7 @@ impl Warden {
                     }
                 };
                 text(ui, if self.reveal { "sample-only-7X!" } else { "••••••••••••••••" }).font_size(16).weight(600);
-                column(ui).width_percent(100.).height(4.).radius(2.).background(Color::Literal(0x64b778)).end();
+                column(ui).width_percent(100.).height(4.).radius(RADIUS).background(Color::Literal(0x64b778)).end();
                 text(ui, "Strong · unique").font_size(12).color(Color::Literal(0x39784c));
             };
             surface(ui).width(0.).grow(1.).min_width(if compact { 220. } else { 0. })
@@ -318,9 +318,9 @@ impl Warden {
                 let _ = label;
                 row(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
                     column(ui).width(0.).grow(1.).gap(8) + |ui| {
-                        column(ui).height(15.).width_percent(72.).radius(4.)
+                        column(ui).height(15.).width_percent(72.).radius(RADIUS)
                             .background(Color::Literal(0xd4d4d8)).background_alpha(shade);
-                        column(ui).height(13.).width_percent(45.).radius(4.)
+                        column(ui).height(13.).width_percent(45.).radius(RADIUS)
                             .background(Color::Literal(0xe4e4e7)).background_alpha(shade);
                     };
                 };

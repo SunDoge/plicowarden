@@ -17,17 +17,17 @@ opaque columns:
 | Window inset | 8 logical px, with an 8 px gap between panes |
 | Header | 48 px, full width; controls and the centered command-palette trigger float over the wash |
 | Pane top | Every pane starts at the same y below the header |
-| Navigation | 260 px (220 px below 1120 px viewport); 18 px radius |
-| Item list | 320 px (300 px in the compact pair); 18 px radius; sidebar counts exclude trashed and archived items; reverse and type sorting |
-| Cards | 18 px radius, 24 px item hero |
+| Navigation | 260 px (220 px below 1120 px viewport); 8 px radius |
+| Item list | 320 px (300 px in the compact pair); 8 px radius; sidebar counts exclude trashed and archived items; reverse and type sorting |
+| Cards | 8 px radius, 24 px item hero |
 | Compact pair | Below 900 px the sidebar becomes a separate pane; list and detail share the window |
 | Single pane | Below 640 px only the list or detail shows, with a Back control |
-| List rows | 56 px, 13 px radius, 38 px brand tile, A–Z headers |
-| Detail | 18 px card radius, 24 px hero padding; cards run to the pane edge |
+| List rows | 56 px, 8 px radius, 38 px brand tile, A–Z headers |
+| Detail | 8 px card radius, 24 px hero padding; cards run to the pane edge |
 | Sidebar rows | 28 px, 8 px radius, 160 ms selection/hover transition |
-| Footer | Floating 32 px white capsule with Sync and Lock at the lower right |
+| Footer | Floating 32 px white toolbar with Sync and Lock at the lower right |
 
-The panes share one top edge and one 18 px radius, so their corners line up.
+The panes share one top edge and one 8 px radius, so their corners line up.
 The header spans the whole window and carries the window controls, the pane
 back control, the title and the actions. When an item detail is visible the
 item actions (edit, favorite, duplicate, archive, folder, trash) replace the
@@ -128,18 +128,11 @@ above Email; expanding it opens the region / URL sheet directly below.
 
 ## Surfaces
 
-Vault content cards are solid white with a hairline border and an 18 px radius;
-fields use the theme's control fill. Navigation, the item-list pane, login card
-and modal chrome use Plico's Regular Liquid Glass with paired contact/ambient
-elevation. The window wash is one full-window WGSL pass
-(`assets/backdrop.wgsl`) approximating Triwarden's `WindowBackdrop`: pink,
-peach, mint and lavender radial glows over a light lavender base. It is
-visible in the 8 px window inset, behind the floating header, and across the
-login screen. Glass is deliberately not applied to every detail card: that
-earlier approach washed out text and paid backdrop work for content that did
-not benefit from it. With `Reduce Transparency`, Plico replaces each material
-with its opaque panel fallback and the wash is skipped. `Reduce Motion` snaps
-the sidebar width/gap, row transitions and material feedback.
+Vault, sign-in and settings share an opaque cool-gray canvas and solid panels.
+A shallow shadow separates content groups from the canvas. Selected vault rows
+use a blue fill, and item icons sit on flat neutral tiles. Floating dialogs,
+the compact sidebar and progress overlays use stronger elevation.
+`Reduce Motion` snaps sidebar and row transitions.
 
 Native text fields use Plico's standard control recipe: the theme control fill,
 a 1 px border in the theme border color, the theme radius, and the accent border

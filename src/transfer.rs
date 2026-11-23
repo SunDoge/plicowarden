@@ -185,7 +185,7 @@ impl Warden {
                     checkbox(ui, "Export without encryption", &mut self.transfer.plaintext_ack).disabled(disabled);
                 }
                 text(ui, "Choose a new filename; existing files will not be overwritten.").font_size(12).color(MUTED).width_percent(100.);
-                if button(ui).text("Export vault to file").icon(crate::icons::get("save")).primary().radius(6.)
+                if button(ui).text("Export vault to file").icon(crate::icons::get("save")).primary().radius(RADIUS)
                     .elevation(Elevation::CONTROL).disabled(disabled || !self.transfer.export_ready()).clicked()
                 {
                     self.begin_export();
@@ -202,7 +202,7 @@ impl Warden {
                     .width_percent(100.).disabled(disabled);
                 checkbox(ui, "Import into my personal vault", &mut self.transfer.import_ack).disabled(disabled);
                 if button(ui).text("Choose database and import").icon(crate::icons::get("plus")).primary()
-                    .radius(6.).elevation(Elevation::CONTROL).disabled(disabled || !self.transfer.import_ack)
+                    .radius(RADIUS).elevation(Elevation::CONTROL).disabled(disabled || !self.transfer.import_ack)
                     .clicked()
                 {
                     self.begin_import();

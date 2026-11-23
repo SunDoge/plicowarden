@@ -1249,3 +1249,31 @@ fn account_picker_distinguishes_identical_emails_on_different_servers_and_shows_
             .any(|node| node.label.as_deref() == Some("Unlock"))
     );
 }
+
+#[test]
+fn locked_and_login_screens_show_distinct_headings_at_both_widths() {
+    for width in [390, 1440] {
+        for (screen, heading, absent) in [
+            ("locked", "Vault locked", "Welcome back"),
+            ("login", "Welcome back", "Vault locked"),
+        ] {
+            let app = PreviewConfig {
+                screen: screen.into(),
+                ..Default::default()
+            }
+            .app();
+            let ui = Driver::new(NativeApp(app), width, 850).unwrap();
+            let visible = |label: &str| {
+                ui.placed_nodes()
+                    .iter()
+                    .any(|node| node.paint.text.as_deref() == Some(label))
+            };
+            assert!(visible(heading));
+            assert!(!visible(absent));
+            if screen == "locked" {
+                assert!(visible("alex@example.invalid"));
+                assert!(visible("Unlock"));
+            }
+        }
+    }
+}

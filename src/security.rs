@@ -74,14 +74,14 @@ impl Warden {
         self.security.clipboard_seconds = clipboard.parse().unwrap_or(30);
         text(ui, "Clipboard expiry leaves newer clipboard content untouched.").font_size(12).color(MUTED).width_percent(100.);
         row(ui).width_percent(100.).gap(10).wrap(true) + |ui| {
-            if button(ui).text("Save changes").icon(crate::icons::get("save")).primary().radius(6.)
+            if button(ui).text("Save changes").icon(crate::icons::get("save")).primary().radius(RADIUS)
                 .elevation(Elevation::CONTROL).disabled(self.security_saving).clicked()
             {
                 self.security = self.security.validated();
                 self.security_saving = true;
                 self.commands.push(HostCommand::SaveSecurity(self.security));
             }
-            if button(ui).text("Reset").icon(crate::icons::get("restore")).ghost().radius(6.)
+            if button(ui).text("Reset").icon(crate::icons::get("restore")).ghost().radius(RADIUS)
                 .disabled(self.security_saving).clicked()
             {
                 self.security = Default::default();

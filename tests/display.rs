@@ -110,8 +110,8 @@ fn platform_defaults_and_legacy_preferences_choose_independent_ui_scale() {
         display::window_options(false).linux_csd,
         cfg!(target_os = "linux")
     );
-    assert_eq!(display::window_options(true).corner_radius, 16);
-    assert_eq!(display::window_options(false).corner_radius, 16);
+    assert_eq!(display::window_options(true).corner_radius, 8);
+    assert_eq!(display::window_options(false).corner_radius, 8);
     assert!(display::window_options(true).has_shadow);
     assert!(display::window_options(false).has_shadow);
     assert_eq!(display::window_options(true).initial_inner_size, (950, 720));
@@ -254,18 +254,18 @@ fn native_accessibility_preferences_adapt_the_ui_without_changing_saved_appearan
     assert_eq!(
         fullscreen_shaders(&scene),
         0,
-        "reduced transparency drops the fullscreen pastel wash; analytic widgets remain"
+        "the flat window canvas requires no fullscreen shader"
     );
     assert!(!source.has_anim());
 }
 
 #[test]
 fn official_client_surfaces_ignore_removed_legacy_preferences_and_render() {
-    fn shaders(scene: &plico_renderer::Scene) -> usize {
+    fn backdrop_shaders(scene: &plico_renderer::Scene) -> usize {
         scene
             .commands
             .iter()
-            .filter(|command| matches!(command, plico_renderer::PaintCommand::Shader { .. }))
+            .filter(|command| matches!(command, plico_renderer::PaintCommand::Shader { effect, .. } if effect.reads_backdrop()))
             .count()
     }
     for screen in [
@@ -290,9 +290,10 @@ fn official_client_surfaces_ignore_removed_legacy_preferences_and_render() {
         source
             .render_retained_frame(&mut scene, &mut text, (1440, 1000), 1.)
             .unwrap();
-        assert!(
-            shaders(&scene) > 0,
-            "{screen}: the shell declares the pastel wash"
+        assert_eq!(
+            backdrop_shaders(&scene),
+            0,
+            "{screen}: app surfaces must stay opaque"
         );
     }
 }

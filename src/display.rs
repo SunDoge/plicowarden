@@ -1,6 +1,8 @@
 //! Application density is independent of the operating system's backing scale.
 use plico_desktop::WindowOptions;
 
+pub(crate) const CORNER_RADIUS: u16 = 8;
+
 pub const fn default_scale(macos: bool) -> f64 {
     if macos { 0.85 } else { 1. }
 }
@@ -13,7 +15,7 @@ pub fn window_options(custom_titlebar: bool) -> WindowOptions {
         .title("Plicowarden")
         .decorations(!custom_titlebar)
         .linux_csd(cfg!(target_os = "linux"))
-        .corner_radius(16)
+        .corner_radius(CORNER_RADIUS.into())
         .initial_inner_size(width, height)
         .min_inner_size(min_width, min_height)
 }

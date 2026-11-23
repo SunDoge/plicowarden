@@ -29,11 +29,11 @@ pub fn picker(
 #[component]
 #[rustfmt::skip]
 fn region_selector(ui: &mut UiContext, selected: &mut usize, disabled: bool) {
-    row(ui).gap(2).padding(4).radius(8.).background(Color::Control) + |ui| {
+    row(ui).gap(2).padding(4).radius(RADIUS).background(Color::Control) + |ui| {
         for (index, label) in ["Self-hosted", "Bitwarden US", "Bitwarden EU"].iter().enumerate()
         {
             ui.keyed(index as u64, |ui| {
-                let control = button(ui).text(*label).height(30.).padding_x(8).radius(6.).font_size(13);
+                let control = button(ui).text(*label).height(30.).padding_x(8).radius(RADIUS).font_size(13);
                 let control = if *selected == index {
                     control.background(Color::Panel).border(1., EDGE)
                 } else {
@@ -70,9 +70,9 @@ fn login_server_identity(
 ) -> bool {
     let mut change = false;
     surface(ui).width_percent(100.).padding_x(12).padding_y(9).gap(10)
-        .radius(11.).border(1., EDGE).background(Color::Control) + |ui| {
+        .radius(RADIUS).border(1., EDGE).background(Color::Control) + |ui| {
         row(ui).width_percent(100.).align(Align::Center).gap(10) + |ui| {
-            column(ui).width(30.).height(30.).shrink(0.).radius(9.)
+            column(ui).width(30.).height(30.).shrink(0.).radius(RADIUS)
                 .align(Align::Center).justify(Justify::Center)
                 .background(Color::Panel).border(1., EDGE) + |ui| {
                 glyph(ui, "globe", 15., Color::Accent);
@@ -240,7 +240,7 @@ impl Warden {
         // state file): the remembered email, the chosen region and the
         // self-hosted server URL with its endpoint overrides. The secret
         // never persists - only what the user would retype anyway.
-        if !self.authenticated && !self.login_password_step && !self.adding_account {
+        if !self.lock_screen && !self.authenticated && !self.login_password_step && !self.adding_account {
             let remembered_email = ui.persisted_state("login.email", String::new);
             if self.email.is_empty() {
                 self.email = remembered_email.read().clone();
@@ -277,7 +277,8 @@ impl Warden {
                 self.persist_login_settings = false;
             }
         }
-        let split = ui.viewport_width() >= 900.;
+        let locked = self.lock_screen && self.factors.is_empty();
+        let split = !locked && ui.viewport_width() >= 900.;
         row(ui).width_percent(100.).height_percent(100.) + |ui| {
             if split {
                 login_brand(ui, ui.viewport_width() * 0.44);
@@ -287,10 +288,10 @@ impl Warden {
             column(ui).position(plico::Position::Relative).width(0.).grow(1.).height_percent(100.)
                 .align(Align::Center).justify(Justify::Center).padding(24)
                 .padding_top(if split { 40. } else { top as f32 }).gap(20)
-                .background(Color::Literal(0xfbfafd)).background_alpha(if split { 1. } else { 0. })
+                .background(Color::Surface).background_alpha(if split { 1. } else { 0. })
                 .scroll_y(true) + |ui|
             {
-                if !split {
+                if !split && !locked {
                     row(ui).gap(10).align(Align::Center) + |ui| {
                         glyph(ui, "shield", 24., Color::Accent);
                         text(ui, "Plicowarden").font_size(20).weight(700).color(INK);
@@ -298,25 +299,39 @@ impl Warden {
                 }
                 column(ui).width(width).gap(16).padding_bottom(24) + |ui| {
                 column(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
-                    glyph(ui, if self.login_password_step { "key" } else { "shield" }, 32., Color::Accent);
+                    if locked {
+                        column(ui).width(60.).height(60.).radius(RADIUS).background(Color::Control)
+                            .align(Align::Center).justify(Justify::Center) + |ui| {
+                            glyph(ui, "lock", 28., INK);
+                        };
+                    } else {
+                        glyph(ui, if self.login_password_step { "key" } else { "shield" }, 32., Color::Accent);
+                    }
                     text(
                         ui,
                         if !self.factors.is_empty() {
                             "Verify your identity"
+                        } else if locked {
+                            "Vault locked"
                         } else {
                             "Welcome back"
                         },
                     ).font_size(24).weight(700).color(INK);
-                    if self.login_password_step {
+                    if locked && self.login_password_step {
+                        text(ui, &self.email).font_size(15).weight(600).color(INK);
+                        text(ui, self.login_server_target()).font_size(12).color(MUTED);
+                    } else if locked {
+                        text(ui, "Sign in to open your vault.").font_size(13).color(MUTED);
+                    } else if self.login_password_step {
                         text(ui, &self.email).font_size(14).color(MUTED);
                     } else if self.factors.is_empty() {
                         text(ui, "Sign in to your Plicowarden vault.").font_size(13).color(MUTED);
                     }
                 };
-                glass_surface(ui).width_percent(100.).padding(24).gap(16) + |ui| {
+                surface(ui).width_percent(100.).padding(24).gap(16) + |ui| {
                     let server_target = self.login_server_target();
                     let server_description = self.login_server_description();
-                    if login_server_identity(
+                    if !locked && login_server_identity(
                         ui,
                         &server_target,
                         server_description,
@@ -325,7 +340,11 @@ impl Warden {
                         self.edit_login_server();
                     }
                     if self.factors.is_empty() {
-                        if !self.login_password_step {
+                        if locked && !self.login_password_step {
+                            if button(ui).text("Sign in").primary().width_percent(100.).clicked() {
+                                self.back_to_email();
+                            }
+                        } else if !self.login_password_step {
                             column(ui).width_percent(100.).gap(8) + |ui| {
                                 text(ui, "Email address").font_size(14).weight(600).color(INK);
                                 let submitted = text_input_string(ui, "Email address", &mut self.email)
@@ -336,7 +355,7 @@ impl Warden {
                                 }
                             };
                             if button(ui).text("Continue").primary()
-                                .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .radius(RADIUS).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .width_percent(100.).disabled(self.busy || self.email.trim().is_empty())
                                 .clicked()
                             {
@@ -360,9 +379,9 @@ impl Warden {
                                             "Show master password"
                                         },
                                     ).position(plico::Position::Absolute).inset_right(4.).inset_top(4.)
-                                        .width(28.).height(28.).padding(6.).radius(6.)
+                                        .width(28.).height(28.).padding(6.).radius(RADIUS)
                                         .background(Color::Panel).background_alpha(0.)
-                                        .hover_background(Color::Literal(0xeeeaf3))
+                                        .hover_background(Color::ControlHover)
                                         .disabled(self.busy) + |ui| {
                                         glyph(
                                             ui,
@@ -381,9 +400,9 @@ impl Warden {
                                 }
                             };
                             if button(ui).text(if self.busy {
-                                    "Logging in…"
+                                    if locked { "Unlocking…" } else { "Logging in…" }
                                 } else if self.has_cached_account() { "Unlock" } else { "Sign in" })
-                                .primary().radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .primary().radius(RADIUS).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .width_percent(100.)
                                 .disabled(self.busy || self.password.is_empty()).clicked()
                             {
@@ -421,7 +440,7 @@ impl Warden {
                                 .autofocus(true).request_focus(focus).width_percent(100.)
                                 .disabled(self.busy).response().submitted();
                             if button(ui).text(if self.busy { "Verifying…" } else { "Verify" }).primary()
-                                .radius(6.).corner_smoothing(1.).elevation(Elevation::CONTROL)
+                                .radius(RADIUS).corner_smoothing(1.).elevation(Elevation::CONTROL)
                                 .width_percent(100.).disabled(self.busy || self.otp.is_empty()).clicked()
                                 || submitted
                             {
@@ -449,10 +468,10 @@ impl Warden {
                     if copyable_error(ui, &self.error) {
                         self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
                     }
-                    if !self.notice.is_empty() {
+                    if !self.notice.is_empty() && !(locked && self.notice == "Vault locked.") {
                         text(ui, &self.notice).color(MUTED).width_percent(100.);
                     }
-                    if (self.login_password_step || !self.factors.is_empty())
+                    if !locked && (self.login_password_step || !self.factors.is_empty())
                         && !self.busy
                         && button(ui).text("Back").width_percent(100.)
                             .height(32.).clicked()
@@ -460,8 +479,8 @@ impl Warden {
                         self.back_to_email();
                     }
                 };
-                if !self.login_password_step && self.factors.is_empty() && self.environment_open {
-                            glass_surface(ui).padding(20).gap(12) + |ui| {
+                if !locked && !self.login_password_step && self.factors.is_empty() && self.environment_open {
+                            surface(ui).padding(20).gap(12) + |ui| {
                                 text(ui, "Server").font_size(16).weight(650);
                                 let mut region = match self.region.as_str() {
                                     "us" => 1,
@@ -504,7 +523,7 @@ impl Warden {
                                             self.environment_error.clone()),
                                     );
                                 }
-                                if button(ui).radius(6.).icon(crate::icons::get("check")).text("Done")
+                                if button(ui).radius(RADIUS).icon(crate::icons::get("check")).text("Done")
                                     .width_percent(100.).clicked()
                                     && self.validate_login_server()
                                 {
@@ -519,7 +538,7 @@ impl Warden {
                 {
                     self.accounts_modal.open();
                 }
-                if button(ui).icon(crate::icons::get("grid")).text("Browse demo vault").ghost()
+                if !locked && button(ui).icon(crate::icons::get("grid")).text("Browse demo vault").ghost()
                     .width_percent(100.).disabled(self.busy).clicked()
                 {
                     self.lock();
@@ -538,7 +557,7 @@ impl Warden {
     pub fn accounts_ui(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.accounts_modal);
         modal(ui, &mut state).title("Accounts").width(520.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             text(ui, "Saved accounts stay encrypted on this device.")
                 .font_size(12).color(MUTED).width_percent(100.);
             if self.saved_accounts.is_empty() {
@@ -556,11 +575,11 @@ impl Warden {
                 let label = format!("Unlock account {} on {}", account.config.email, server);
                 ui.keyed(crate::model::business_key(&account.id), |ui| {
                     row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
-                        if plico::widgets::nav_entry(ui, label, current)
+                        if quiet_nav(ui, label, current)
                             .width(0.).grow(1.).height(64.).disabled(self.busy).children(|ui| {
                             row(ui).width_percent(100.).align(Align::Center).gap(10.) + |ui| {
                                 avatar(ui).fallback(&initial).size(32.).font_size(12)
-                                    .background(Color::Selection).color(Color::Literal(0x1d4ed8));
+                                    .background(Color::Control).color(INK);
                                 column(ui).width(0.).grow(1.).min_width(0.).gap(3.) + |ui| {
                                     text(ui, &account.config.email).font_size(14).weight(600).color(INK)
                                         .width_percent(100.).ellipsis(true);
@@ -568,7 +587,7 @@ impl Warden {
                                         .ellipsis(true);
                                 };
                                 if current {
-                                    row(ui).padding_x(7.).padding_y(3.).radius(10.)
+                                    row(ui).padding_x(7.).padding_y(3.).radius(RADIUS)
                                         .corner_smoothing(0.).border(1., Color::Border) + |ui| {
                                         text(ui, "Current").font_size(10).weight(600).color(MUTED);
                                     };
@@ -766,7 +785,7 @@ impl Warden {
         let mut state = std::mem::take(&mut self.move_modal);
         let mut confirmed = false;
         modal(ui, &mut state).title("Move to folder").width(440.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             text!(
                 ui,
                 "Choose a destination for {} item{}.",
@@ -784,11 +803,11 @@ impl Warden {
                 self.commands.push(crate::model::HostCommand::CopyError(self.error.clone()));
             }
             row(ui).width_percent(100.).gap(10).justify(Justify::End) + |ui| {
-                if button(ui).text("Cancel").aria_label("Cancel move").ghost().radius(6.).clicked() {
+                if button(ui).text("Cancel").aria_label("Cancel move").ghost().radius(RADIUS).clicked() {
                     ui.close_modal();
                 }
                 if button(ui).text("Move").aria_label("Move selected items").icon(crate::icons::get("folder"))
-                    .primary().radius(6.).disabled(self.busy || self.move_ids.is_empty()).clicked()
+                    .primary().radius(RADIUS).disabled(self.busy || self.move_ids.is_empty()).clicked()
                 {
                     confirmed = true;
                 }
@@ -804,7 +823,7 @@ impl Warden {
     pub fn folder_manager(&mut self, ui: &mut UiContext) {
         let mut state = std::mem::take(&mut self.folders_modal);
         modal(ui, &mut state).header(false).title("Folders").width(560.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             text(ui, "Folders").font_size(24).weight(700);
             text(ui, "Organize your personal vault. Folder names are encrypted.").width_percent(100.).color(MUTED);
             let list_height = (self.folders.len() as f32 * 42.).clamp(42., 360.);
@@ -888,7 +907,7 @@ impl Warden {
             ),
         };
         modal(ui, &mut state).title(title).width(480.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             text(ui, title).font_size(24).weight(700);
             text(ui, message).width_percent(100.).color(MUTED);
             row(ui).width_percent(100.).justify(Justify::End).gap(10) + |ui| {
@@ -924,7 +943,7 @@ impl Warden {
         }
         let mut decision = None;
         modal(ui, &mut state).title("SSH signing request").width(560.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             let Some(approval) = approval.as_ref() else { return; };
             column(ui).gap(16).width_percent(100.) + |ui| {
                 text(ui, "Allow one SSH signature?").font_size(24).weight(700).width_percent(100.);
@@ -964,11 +983,11 @@ impl Warden {
         }
         let mut decision = None;
         modal(ui, &mut state).title("Sign-in request").width(520.)
-            .material(dialog_glass()).children(|ui| {
+            .children(|ui| {
             let Some(request) = request.as_ref() else { return; };
             column(ui).gap(16).width_percent(100.) + |ui| {
                 row(ui).gap(12).align(Align::Center).width_percent(100.) + |ui| {
-                    column(ui).width(38.).height(38.).shrink(0.).radius(11.)
+                    column(ui).width(38.).height(38.).shrink(0.).radius(RADIUS)
                         .background(Color::Control).align(Align::Center).justify(Justify::Center) + |ui| {
                         glyph(ui, "shield", 19., Color::Accent);
                     };
@@ -979,7 +998,7 @@ impl Warden {
                             .font_size(12).color(MUTED).width_percent(100.);
                     };
                 };
-                column(ui).width_percent(100.).gap(0).padding(12).radius(10.)
+                column(ui).width_percent(100.).gap(0).padding(12).radius(RADIUS)
                     .background(Color::Control) + |ui| {
                     approval_detail_row(ui, "Device", &request.device_type);
                     approval_detail_row(ui, "IP address", &request.ip_address);
@@ -1040,7 +1059,7 @@ impl Warden {
             return;
         }
         let mut hide = false;
-        column(ui).width_percent(100.).gap(10).padding(12).radius(8.).background(Color::Control) + |ui| {
+        column(ui).width_percent(100.).gap(10).padding(12).radius(RADIUS).background(Color::Control) + |ui| {
             row(ui).width_percent(100.).align(Align::Center).gap(8) + |ui| {
                 column(ui).width(0.).grow(1.).min_width(0.).gap(2) + |ui| {
                     text(ui, "Connection progress").font_size(13).weight(600);
