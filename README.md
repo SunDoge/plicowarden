@@ -5,6 +5,10 @@
 [![Latest release](https://img.shields.io/github/v/release/SunDoge/plicowarden?display_name=tag&sort=semver)](https://github.com/SunDoge/plicowarden/releases/latest)
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
 
+
+<img width="3200" height="2250" alt="vault-1280x900-retina" src="https://github.com/user-attachments/assets/6544b35e-ed2b-4976-85da-9405811ec7ee" />
+
+
 Plicowarden is a native Rust password-manager client built with
 [Plico](https://github.com/SunDoge/plico) and wgpu. It provides a three-column
 vault, local encrypted cache and search, account switching, item editing,
