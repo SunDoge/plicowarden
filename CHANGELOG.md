@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/SunDoge/plicowarden/compare/v0.1.1...v0.1.2) - 2026-11-24
+
+### Added
+
+- *(ui)* refresh vault styling and distinguish unlock from sign-in
+
+### Fixed
+
+- *(deps)* update Plico for desktop UI fixes
+
+### Other
+
+- add image to README for visual representation
+
 ## [0.1.1](https://github.com/SunDoge/plicowarden/compare/v0.1.0...v0.1.1) - 2026-11-17
 
 ### Added

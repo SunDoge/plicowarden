@@ -5552,7 +5552,7 @@ dependencies = [
 
 [[package]]
 name = "plicowarden"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "directories",
  "getrandom 0.3.4",
@@ -5576,7 +5576,7 @@ dependencies = [
 
 [[package]]
 name = "plicowarden-sdk"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "arboard",
  "async-trait",
